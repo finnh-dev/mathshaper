@@ -1,0 +1,1 @@
+cargo xtask bundle mathshaper --release && copy /Y target\bundled\Mathshaper.vst3\Contents\x86_64-win\Mathshaper.vst3 "c:\Program Files\Common Files\VST3"
