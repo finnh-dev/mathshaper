@@ -31,3 +31,6 @@ strip = "symbols"
 inherits = "release"
 debug = true
 strip = "none"
+
+[dev-dependencies]
+rand = "0.8.5"

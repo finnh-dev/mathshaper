@@ -818,6 +818,7 @@ dependencies = [
  "meval",
  "nih_plug",
  "nih_plug_iced",
+ "rand",
 ]
 
 [[package]]

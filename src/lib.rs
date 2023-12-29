@@ -1,6 +1,7 @@
+mod shaper;
+
 use nih_plug::prelude::*;
 use std::sync::Arc;
-
 // This is a shortened version of the gain example with most comments removed, check out
 // https://github.com/robbert-vdh/nih-plug/blob/master/plugins/examples/gain/src/lib.rs to get
 // started
@@ -15,11 +16,11 @@ struct MathshaperParams {
     /// these IDs remain constant, you can rename and reorder these fields as you wish. The
     /// parameters are exposed to the host in the same order they were defined. In this case, this
     /// gain parameter is stored as linear gain while the values are displayed in decibels.
-    #[id = "gain"]
-    pub gain: FloatParam,
+    #[id = "drive"]
+    pub drive: FloatParam,
 }
 
-impl Default for Mathshaper {
+impl<'a> Default for Mathshaper {
     fn default() -> Self {
         Self {
             params: Arc::new(MathshaperParams::default()),
@@ -33,16 +34,10 @@ impl Default for MathshaperParams {
             // This gain is stored as linear gain. NIH-plug comes with useful conversion functions
             // to treat these kinds of parameters as if we were dealing with decibels. Storing this
             // as decibels is easier to work with, but requires a conversion for every sample.
-            gain: FloatParam::new(
-                "Gain",
-                util::db_to_gain(0.0),
-                FloatRange::Skewed {
-                    min: util::db_to_gain(-30.0),
-                    max: util::db_to_gain(30.0),
-                    // This makes the range appear as if it was linear when displaying the values as
-                    // decibels
-                    factor: FloatRange::gain_skew_factor(-30.0, 30.0),
-                },
+            drive: FloatParam::new(
+                "Drive",
+                0.0,
+                FloatRange::Linear { min: 0.0, max: 100.0 },
             )
             // Because the gain parameter is stored as linear gain instead of storing the value as
             // decibels, we need logarithmic smoothing
@@ -57,7 +52,7 @@ impl Default for MathshaperParams {
     }
 }
 
-impl Plugin for Mathshaper {
+impl<'a> Plugin for Mathshaper {
     const NAME: &'static str = "Mathshaper";
     const VENDOR: &'static str = "Finn Heintzmann";
     const URL: &'static str = env!("CARGO_PKG_HOMEPAGE");
@@ -124,10 +119,10 @@ impl Plugin for Mathshaper {
     ) -> ProcessStatus {
         for channel_samples in buffer.iter_samples() {
             // Smoothing is optionally built into the parameters themselves
-            let gain = self.params.gain.smoothed.next();
+            let drive = self.params.drive.smoothed.next() / 100.0;
 
             for sample in channel_samples {
-                *sample *= gain;
+                *sample *= drive;
             }
         }
 
