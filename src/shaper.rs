@@ -1,4 +1,6 @@
-const TABLE_SIZE: usize = 8192;  
+use meval::Expr;
+
+const TABLE_SIZE: usize = 65536;  
 const INDEX_MAX: usize = TABLE_SIZE - 1;
 // const F32_RANGE: f64 = f32::MAX as f64 - f32::MIN as f64;
 #[allow(unused)]
@@ -6,30 +8,35 @@ const SAMPLE_MAX: f32 = 1.0;
 const SAMPE_MIN: f32 = -1.0;
 const STEP: f32 = 2.0 / INDEX_MAX as f32;
 
-
-fn default_lut() -> [f32; TABLE_SIZE] {
-    let mut lut = [0.0; TABLE_SIZE];
-    for i in 0..lut.len() {
-        lut[i] = SAMPE_MIN + (STEP * i as f32);
-    };
-    lut
-}
-
-struct Shaper {
+pub struct Shaper {
     lut: [f32; TABLE_SIZE],
 }
 
+impl Default for Shaper {
+    fn default() -> Self {
+        Self { lut: Self::default_lut() }
+    }
+}
+
 impl Shaper {
-    #[allow(unused)]
+    #[allow(unused)] // TODO: remove
     pub fn calc(&self, x: f32) -> f32 {
-        self.interpolate(Self::nearest_lower_index(x), x)
+        self.interpolate(Self::index(x), x)
     }
 
-    fn nearest_lower_index(value: f32) -> usize {
+    fn index(value: f32) -> usize {
        (((value as f32 - SAMPE_MIN) / STEP) as usize).min(INDEX_MAX)
     }
 
-    fn value_from_index(index: usize) -> f32 {
+    fn default_lut() -> [f32; TABLE_SIZE] {
+        let mut lut = [0.0; TABLE_SIZE];
+        for i in 0..lut.len() {
+            lut[i] = SAMPE_MIN + (STEP * i as f32);
+        };
+        lut
+    }
+
+    fn value(index: usize) -> f32 {
         SAMPE_MIN + (index as f32 * STEP)
     }
 
@@ -39,26 +46,33 @@ impl Shaper {
         };
         let higher_index = lower_index + 1;
         let y1 = self.lut[lower_index];
-        let x1 = Shaper::value_from_index(lower_index);
+        let x1 = Self::value(lower_index);
         let y2 = self.lut[higher_index];
-        let x2 = Shaper::value_from_index(higher_index);
+        let x2 = Self::value(higher_index);
 
         let delta_y = y1 - y2;
         let delta_x = x1 - x2;
         let position = (x - x1) / delta_x;
         y1 + (delta_y * position)
     }
-}
 
-impl Default for Shaper {
-    fn default() -> Self {
-        Self { lut: default_lut()  }
+    fn generate(&mut self, func: impl Fn(f64) -> f64) {
+        for i in 0..TABLE_SIZE {
+            self.lut[i] = func(Self::value(i) as f64) as f32;
+        }
+    }
+
+    pub fn promtp(&mut self, prompt: String) {
+        let expr: Expr = prompt.parse().unwrap();
+        self.generate(expr.bind("x").unwrap());
     }
 }
+
 
 #[cfg(test)]
 mod test {
 
+    use plotly::{Plot, Scatter};
     use rand::random;
 
     use crate::shaper::{INDEX_MAX, SAMPE_MIN, SAMPLE_MAX};
@@ -86,19 +100,19 @@ mod test {
 
     #[test]
     fn test_value_to_index() {
-        let index = Shaper::nearest_lower_index(SAMPE_MIN);
+        let index = Shaper::index(SAMPE_MIN);
         println!("Testing if index is 0 with input SAMPE_MIN:");
         println!("\tindex:          {}", index);
         println!("\texpected index: {}", 0);
         assert_eq!(index, 0);
 
-        let index = Shaper::nearest_lower_index(SAMPLE_MAX);
+        let index = Shaper::index(SAMPLE_MAX);
         println!("Testing if index is max index with input SAMPLE_MAX:");
         println!("\tindex:          {}", index);
         println!("\texpected index: {}", INDEX_MAX);
         assert_eq!(index, INDEX_MAX);
 
-        let index = Shaper::nearest_lower_index(SAMPLE_MAX + 2.0);
+        let index = Shaper::index(SAMPLE_MAX + 2.0);
         println!("Testing if index is max index with input out of range:");
         println!("\tindex:          {}", index);
         println!("\texpected index: {}", INDEX_MAX);
@@ -117,7 +131,7 @@ mod test {
         
         for _ in 0..1000 {
             let x = SAMPE_MIN + random::<f32>() + random::<f32>();
-            let y = shaper.interpolate(Shaper::nearest_lower_index(x), x);
+            let y = shaper.interpolate(Shaper::index(x), x);
             // println!("{:<2}: x={}, y={}", i, x, y);
             // println!("inaccuracy: {}", x - y);
             assert_eq!(x, y)
@@ -164,4 +178,24 @@ mod test {
         // plot.write_html("plot.html");
 
     }
+
+    #[test]
+    fn test_prompt() {
+        // let prompt = "2 * x + x * (sin(x * (abs(x) + 10) * 5) * 0.5)".to_owned();
+        let prompt = "tanh(2 * x + (x * x) * (sin(x * (abs(x) + 10) * 5) * 2))".to_owned();
+
+        let mut shaper = Shaper::default();
+        shaper.promtp(prompt);
+
+        let mut vec_x: Vec<f32> = Vec::new();
+        let mut vec_y: Vec<f32> = Vec::new();
+        for i in 0..shaper.lut.len() {
+            vec_y.push(shaper.lut[i]);
+            vec_x.push(Shaper::value(i));
+        }
+
+        let mut plot = Plot::new();
+        plot.add_trace(Scatter::new(vec_x, vec_y));
+        plot.write_html("plot.html");
+    } 
 }

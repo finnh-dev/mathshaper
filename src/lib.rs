@@ -1,6 +1,7 @@
 mod shaper;
 
 use nih_plug::prelude::*;
+use shaper::Shaper;
 use std::sync::Arc;
 // This is a shortened version of the gain example with most comments removed, check out
 // https://github.com/robbert-vdh/nih-plug/blob/master/plugins/examples/gain/src/lib.rs to get
@@ -8,6 +9,7 @@ use std::sync::Arc;
 
 struct Mathshaper {
     params: Arc<MathshaperParams>,
+    shaper: Shaper,
 }
 
 #[derive(Params)]
@@ -22,8 +24,11 @@ struct MathshaperParams {
 
 impl<'a> Default for Mathshaper {
     fn default() -> Self {
+        let mut shaper = Shaper::default();
+        shaper.promtp("tanh(2 * x + (x * x) * (sin(x * (abs(x) + 10) * 5) * 2))".to_owned());
         Self {
             params: Arc::new(MathshaperParams::default()),
+            shaper,
         }
     }
 }
@@ -119,10 +124,10 @@ impl<'a> Plugin for Mathshaper {
     ) -> ProcessStatus {
         for channel_samples in buffer.iter_samples() {
             // Smoothing is optionally built into the parameters themselves
-            let drive = self.params.drive.smoothed.next() / 100.0;
+            let _drive = self.params.drive.smoothed.next() / 100.0;
 
             for sample in channel_samples {
-                *sample *= drive;
+                *sample = self.shaper.calc(*sample);
             }
         }
 
