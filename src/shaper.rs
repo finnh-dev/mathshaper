@@ -1,6 +1,9 @@
+use std::ops::RangeInclusive;
+
 const TABLE_SIZE: usize = 128;  
 const INDEX_MAX: usize = TABLE_SIZE - 1;
 const F32_RANGE: f64 = f32::MAX as f64 - f32::MIN as f64;
+const SAMPLE_RANGE: RangeInclusive<f32> = -1.0..=1.0;
 const STEP: f64 = F32_RANGE / INDEX_MAX as f64;
 
 
@@ -34,10 +37,11 @@ impl Shaper {
         if lower_index == INDEX_MAX {
             return self.lut[INDEX_MAX];
         };
+        let higher_index = lower_index + 1;
         let y1 = self.lut[lower_index];
         let x1 = Shaper::value_from_index(lower_index);
-        let y2 = self.lut[lower_index + 1];
-        let x2 = Shaper::value_from_index(lower_index + 1);
+        let y2 = self.lut[higher_index];
+        let x2 = Shaper::value_from_index(higher_index);
         println!("y1: {}\nx1: {}\ny2: {}\nx2: {}", y1, x1, y2, x2);
 
         let delta_y = y1 - y2;
@@ -101,6 +105,7 @@ mod test {
     fn test_interpolate() {
         let shaper = Shaper::default();
         let mut rng = rand::thread_rng();
+        let raange = -1.0_f32..1.0_f32;
         
         for i in 0..100 {
             let bytes: [u8; 4] = rng.gen();
