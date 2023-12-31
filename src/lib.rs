@@ -2,7 +2,7 @@ mod shaper;
 mod editor;
 
 use nih_plug::prelude::*;
-use nih_plug_iced::IcedState;
+use nih_plug_vizia::ViziaState;
 use shaper::Shaper;
 use std::sync::Arc;
 // This is a shortened version of the gain example with most comments removed, check out
@@ -21,7 +21,7 @@ struct MathshaperParams {
     /// parameters are exposed to the host in the same order they were defined. In this case, this
     /// gain parameter is stored as linear gain while the values are displayed in decibels.
     #[persist = "editor-state"]
-    editor_state: Arc<IcedState>,
+    editor_state: Arc<ViziaState>,
     #[id = "dry"]
     pub dry: FloatParam,
     #[id = "wet"]
@@ -135,7 +135,7 @@ impl Plugin for Mathshaper {
     }
 
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
-        editor::create(self.params.clone(),  self.shaper.clone(), self.params.editor_state.clone())
+        editor::create(self.params.clone(), self.params.editor_state.clone())
     }
 
     fn initialize(
