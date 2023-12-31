@@ -1,6 +1,8 @@
 mod shaper;
+mod editor;
 
 use nih_plug::prelude::*;
+use nih_plug_iced::IcedState;
 use shaper::Shaper;
 use std::sync::Arc;
 // This is a shortened version of the gain example with most comments removed, check out
@@ -9,7 +11,7 @@ use std::sync::Arc;
 
 struct Mathshaper {
     params: Arc<MathshaperParams>,
-    shaper: Shaper,
+    shaper: Arc<Shaper>,
 }
 
 #[derive(Params)]
@@ -18,17 +20,23 @@ struct MathshaperParams {
     /// these IDs remain constant, you can rename and reorder these fields as you wish. The
     /// parameters are exposed to the host in the same order they were defined. In this case, this
     /// gain parameter is stored as linear gain while the values are displayed in decibels.
-    #[id = "drive"]
-    pub drive: FloatParam,
+    #[persist = "editor-state"]
+    editor_state: Arc<IcedState>,
+    #[id = "dry"]
+    pub dry: FloatParam,
+    #[id = "wet"]
+    pub wet: FloatParam,
+
 }
 
-impl<'a> Default for Mathshaper {
+impl Default for Mathshaper {
     fn default() -> Self {
         let mut shaper = Shaper::default();
-        shaper.promtp("tanh(2 * x + (x * x) * (sin(x * (abs(x) + 10) * 5) * 2))".to_owned());
+        // shaper.prompt("tanh(2 * x + (x * x) * sin(x * (abs(x) + 10) * 5) * 2)".to_owned());
+        shaper.prompt("tanh(5 * x)".to_owned());
         Self {
             params: Arc::new(MathshaperParams::default()),
-            shaper,
+            shaper: Arc::new(shaper),
         }
     }
 }
@@ -39,10 +47,37 @@ impl Default for MathshaperParams {
             // This gain is stored as linear gain. NIH-plug comes with useful conversion functions
             // to treat these kinds of parameters as if we were dealing with decibels. Storing this
             // as decibels is easier to work with, but requires a conversion for every sample.
-            drive: FloatParam::new(
-                "Drive",
-                0.0,
-                FloatRange::Linear { min: 0.0, max: 100.0 },
+            editor_state: editor::default_state(),
+            dry: FloatParam::new(
+                "Dry",
+                util::db_to_gain(-30.0),
+                FloatRange::Skewed {
+                    min: util::db_to_gain(-30.0),
+                    max: util::db_to_gain(10.0),
+                    // This makes the range appear as if it was linear when displaying the values as
+                    // decibels
+                    factor: FloatRange::gain_skew_factor(-30.0, 10.0),
+                },
+            )
+            // Because the gain parameter is stored as linear gain instead of storing the value as
+            // decibels, we need logarithmic smoothing
+            .with_smoother(SmoothingStyle::Logarithmic(50.0))
+            .with_unit(" dB")
+            // There are many predefined formatters we can use here. If the gain was stored as
+            // decibels instead of as a linear gain value, we could have also used the
+            // `.with_step_size(0.1)` function to get internal rounding.
+            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
+            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+            wet: FloatParam::new(
+                "Wet",
+                util::db_to_gain(0.0),
+                FloatRange::Skewed {
+                    min: util::db_to_gain(-30.0),
+                    max: util::db_to_gain(10.0),
+                    // This makes the range appear as if it was linear when displaying the values as
+                    // decibels
+                    factor: FloatRange::gain_skew_factor(-30.0, 10.0),
+                },
             )
             // Because the gain parameter is stored as linear gain instead of storing the value as
             // decibels, we need logarithmic smoothing
@@ -57,7 +92,7 @@ impl Default for MathshaperParams {
     }
 }
 
-impl<'a> Plugin for Mathshaper {
+impl Plugin for Mathshaper {
     const NAME: &'static str = "Mathshaper";
     const VENDOR: &'static str = "Finn Heintzmann";
     const URL: &'static str = env!("CARGO_PKG_HOMEPAGE");
@@ -99,6 +134,10 @@ impl<'a> Plugin for Mathshaper {
         self.params.clone()
     }
 
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
+        editor::create(self.params.clone(),  self.shaper.clone(), self.params.editor_state.clone())
+    }
+
     fn initialize(
         &mut self,
         _audio_io_layout: &AudioIOLayout,
@@ -124,10 +163,11 @@ impl<'a> Plugin for Mathshaper {
     ) -> ProcessStatus {
         for channel_samples in buffer.iter_samples() {
             // Smoothing is optionally built into the parameters themselves
-            let _drive = self.params.drive.smoothed.next() / 100.0;
+            let dry = self.params.dry.smoothed.next();
+            let wet = self.params.wet.smoothed.next();
 
             for sample in channel_samples {
-                *sample = self.shaper.calc(*sample);
+                *sample = self.shaper.calc(*sample) * wet + *sample * dry;
             }
         }
 

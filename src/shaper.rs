@@ -1,6 +1,6 @@
 use meval::Expr;
 
-const TABLE_SIZE: usize = 65536;  
+const TABLE_SIZE: usize = 4096;  
 const INDEX_MAX: usize = TABLE_SIZE - 1;
 // const F32_RANGE: f64 = f32::MAX as f64 - f32::MIN as f64;
 #[allow(unused)]
@@ -14,26 +14,25 @@ pub struct Shaper {
 
 impl Default for Shaper {
     fn default() -> Self {
-        Self { lut: Self::default_lut() }
+        let mut this = Self::new();
+        this.generate(|x| x);
+        this
     }
 }
 
 impl Shaper {
+    fn new() -> Self {
+        Self {
+            lut: [0.0; TABLE_SIZE]
+        }
+    }
     #[allow(unused)] // TODO: remove
     pub fn calc(&self, x: f32) -> f32 {
         self.interpolate(Self::index(x), x)
     }
 
     fn index(value: f32) -> usize {
-       (((value as f32 - SAMPE_MIN) / STEP) as usize).min(INDEX_MAX)
-    }
-
-    fn default_lut() -> [f32; TABLE_SIZE] {
-        let mut lut = [0.0; TABLE_SIZE];
-        for i in 0..lut.len() {
-            lut[i] = SAMPE_MIN + (STEP * i as f32);
-        };
-        lut
+       (((value - SAMPE_MIN) / STEP) as usize).min(INDEX_MAX)
     }
 
     fn value(index: usize) -> f32 {
@@ -62,7 +61,8 @@ impl Shaper {
         }
     }
 
-    pub fn promtp(&mut self, prompt: String) {
+    #[allow(unused)]
+    pub fn prompt(&mut self, prompt: String) {
         let expr: Expr = prompt.parse().unwrap();
         self.generate(expr.bind("x").unwrap());
     }
@@ -182,10 +182,11 @@ mod test {
     #[test]
     fn test_prompt() {
         // let prompt = "2 * x + x * (sin(x * (abs(x) + 10) * 5) * 0.5)".to_owned();
-        let prompt = "tanh(2 * x + (x * x) * (sin(x * (abs(x) + 10) * 5) * 2))".to_owned();
+        // let prompt = "tanh(2 * x + (x * x) * (sin(x * (abs(x) + 10) * 5) * 2) * 0.2)".to_owned();
+        let prompt = "tanh(5 * x)".to_owned();
 
         let mut shaper = Shaper::default();
-        shaper.promtp(prompt);
+        shaper.prompt(prompt);
 
         let mut vec_x: Vec<f32> = Vec::new();
         let mut vec_y: Vec<f32> = Vec::new();
