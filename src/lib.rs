@@ -9,7 +9,7 @@ use std::sync::Arc;
 // https://github.com/robbert-vdh/nih-plug/blob/master/plugins/examples/gain/src/lib.rs to get
 // started
 
-struct Mathshaper {
+pub struct Mathshaper {
     params: Arc<MathshaperParams>,
     shaper: Arc<Shaper>,
 }
