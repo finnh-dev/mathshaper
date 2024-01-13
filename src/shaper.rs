@@ -1,52 +1,69 @@
-use meval::Expr;
+use evalexpr::{build_operator_tree, ContextWithMutableVariables, EvalexprError, HashMapContext};
 
-const TABLE_SIZE: usize = 4096;  
+const TABLE_SIZE: usize = 32;
 const INDEX_MAX: usize = TABLE_SIZE - 1;
 // const F32_RANGE: f64 = f32::MAX as f64 - f32::MIN as f64;
 #[allow(unused)]
 const SAMPLE_MAX: f32 = 1.0;
-const SAMPE_MIN: f32 = -1.0;
+const SAMPLE_MIN: f32 = -1.0;
 const STEP: f32 = 2.0 / INDEX_MAX as f32;
 
 pub struct Shaper {
-    lut: [f32; TABLE_SIZE],
+    baked_function: Box<[f32]>,
+    context: HashMapContext,
 }
 
 impl Default for Shaper {
     fn default() -> Self {
-        let mut this = Self::new();
-        this.generate(|x| x);
-        this
+        let table: Box<[f32]> = (0..TABLE_SIZE).map(Shaper::value).collect();
+        Self {
+            baked_function: table,
+            context: Shaper::default_context(),
+        }
     }
 }
 
 impl Shaper {
-    fn new() -> Self {
-        Self {
-            lut: [0.0; TABLE_SIZE]
-        }
+    fn default_context() -> HashMapContext {
+        let mut context = HashMapContext::default();
+        context
+            .set_value(
+                "PI".to_owned(),
+                evalexpr::Value::Float(std::f64::consts::PI),
+            )
+            .expect("Default constant assignment should not panic.");
+
+        context
     }
+
+    #[allow(unused)]
+    fn new(prompt: &str) -> Result<Self, EvalexprError> {
+        let mut this = Self::default();
+        this.prompt(prompt)?;
+        Ok(this)
+    }
+
     #[allow(unused)] // TODO: remove
-    pub fn calc(&self, x: f32) -> f32 {
-        self.interpolate(Self::index(x), x)
+    pub fn process(&self, x: f32) -> f32 {
+        self.lerp(Self::index(x), x)
     }
 
     fn index(value: f32) -> usize {
-       (((value - SAMPE_MIN) / STEP) as usize).min(INDEX_MAX)
+        (((value - SAMPLE_MIN) / STEP) as usize).min(INDEX_MAX)
     }
 
     fn value(index: usize) -> f32 {
-        SAMPE_MIN + (index as f32 * STEP)
+        SAMPLE_MIN + (index as f32 * STEP)
     }
 
-    fn interpolate(&self, lower_index: usize, x: f32) -> f32 {
-        if lower_index == INDEX_MAX {
-            return self.lut[INDEX_MAX];
+    fn lerp(&self, index: usize, x: f32) -> f32 {
+        if index == INDEX_MAX {
+            return self.baked_function[INDEX_MAX];
         };
-        let higher_index = lower_index + 1;
-        let y1 = self.lut[lower_index];
-        let x1 = Self::value(lower_index);
-        let y2 = self.lut[higher_index];
+        let higher_index = index + 1;
+        let y1 = self.baked_function[index];
+        let x1 = Self::value(index);
+        let y2 = self.baked_function[higher_index];
         let x2 = Self::value(higher_index);
 
         let delta_y = y1 - y2;
@@ -55,19 +72,19 @@ impl Shaper {
         y1 + (delta_y * position)
     }
 
-    fn generate(&mut self, func: impl Fn(f64) -> f64) {
-        for i in 0..TABLE_SIZE {
-            self.lut[i] = func(Self::value(i) as f64) as f32;
-        }
-    }
-
     #[allow(unused)]
-    pub fn prompt(&mut self, prompt: String) {
-        let expr: Expr = prompt.parse().unwrap();
-        self.generate(expr.bind("x").unwrap());
+    pub fn prompt(&mut self, prompt: &str) -> Result<(), EvalexprError> {
+        let node = build_operator_tree(prompt)?;
+        for (i, val) in self.baked_function.iter_mut().enumerate() {
+            self.context.set_value(
+                "x".to_owned(),
+                evalexpr::Value::Float(Shaper::value(i) as f64),
+            );
+            *val = node.eval_float_with_context(&self.context)? as f32;
+        }
+        Ok(())
     }
 }
-
 
 #[cfg(test)]
 mod test {
@@ -75,32 +92,28 @@ mod test {
     use plotly::{Plot, Scatter};
     use rand::random;
 
-    use crate::shaper::{INDEX_MAX, SAMPE_MIN, SAMPLE_MAX};
+    use crate::shaper::{INDEX_MAX, SAMPLE_MAX, SAMPLE_MIN};
 
-    use super::Shaper;
+    use super::{Shaper, TABLE_SIZE};
 
     #[test]
     fn test_floats() {
         assert_eq!(f32::MIN, (f32::MIN as f64) as f32);
         assert_ne!((f32::MIN / 1.24436) as f64, f32::MIN as f64 / 1.24436); // NOT EQUAL!
-        assert_ne!((f32::MIN / 1.24436_f32) as f64, f32::MIN as f64 / 1.24436_f32 as f64); // NOT EQUAL!
+        assert_ne!(
+            (f32::MIN / 1.24436_f32) as f64,
+            f32::MIN as f64 / 1.24436_f32 as f64
+        ); // NOT EQUAL!
         let step = f32::from_bits(0b00000000000000000000000000000001);
         println!("{}", step);
     }
 
     #[test]
-    fn print_default_lut() {
-        let shaper = Shaper::default();
-        for i in 0..shaper.lut.len() {
-            println!("{:<4}:{}", i, shaper.lut[i])
-        };
-        assert_eq!(shaper.lut[0], SAMPE_MIN);
-        assert_eq!(shaper.lut[shaper.lut.len()-1], SAMPLE_MAX);
-    }
+    fn print_default_lut() {}
 
     #[test]
     fn test_value_to_index() {
-        let index = Shaper::index(SAMPE_MIN);
+        let index = Shaper::index(SAMPLE_MIN);
         println!("Testing if index is 0 with input SAMPE_MIN:");
         println!("\tindex:          {}", index);
         println!("\texpected index: {}", 0);
@@ -128,18 +141,18 @@ mod test {
         // let x_vec = x_range.collect::<Vec<usize>>().iter().map(|x| Shaper::value_from_index(x.to_owned())).collect::<Vec<f32>>();
         // let trace_lut = Scatter::new(x_vec.clone(), lut_vec);
         // plot.add_trace(trace_lut);
-        
+
         for _ in 0..1000 {
-            let x = SAMPE_MIN + random::<f32>() + random::<f32>();
-            let y = shaper.interpolate(Shaper::index(x), x);
+            let x = SAMPLE_MIN + random::<f32>() + random::<f32>();
+            let y = shaper.lerp(Shaper::index(x), x);
             // println!("{:<2}: x={}, y={}", i, x, y);
             // println!("inaccuracy: {}", x - y);
             assert_eq!(x, y)
         }
-        
+
         // let mut shaper = Shaper::default();
         // for i in 0..shaper.lut.len() {
-        //     shaper.lut[i] = f32::sin(std::f32::consts::PI * Shaper::value_from_index(i)); 
+        //     shaper.lut[i] = f32::sin(std::f32::consts::PI * Shaper::value_from_index(i));
         // }
 
         // // let mut interpolated_sin: Vec<(f32, f32)> = Vec::new();
@@ -176,27 +189,34 @@ mod test {
         // plot.add_trace(sin_trace);
         // plot.add_trace(expected_sin_trace);
         // plot.write_html("plot.html");
-
     }
 
     #[test]
     fn test_prompt() {
-        // let prompt = "2 * x + x * (sin(x * (abs(x) + 10) * 5) * 0.5)".to_owned();
-        // let prompt = "tanh(2 * x + (x * x) * (sin(x * (abs(x) + 10) * 5) * 2) * 0.2)".to_owned();
-        let prompt = "tanh(5 * x)".to_owned();
-
+        let x_trace: Vec<f32> = (0..TABLE_SIZE).map(Shaper::value).collect();
         let mut shaper = Shaper::default();
-        shaper.prompt(prompt);
-
-        let mut vec_x: Vec<f32> = Vec::new();
-        let mut vec_y: Vec<f32> = Vec::new();
-        for i in 0..shaper.lut.len() {
-            vec_y.push(shaper.lut[i]);
-            vec_x.push(Shaper::value(i));
+        let default_trace = Scatter::new(x_trace.clone(), shaper.baked_function.clone().into())
+            .mode(plotly::common::Mode::Markers)
+            .name("LUT Default");
+        shaper.prompt("math::sin(3 * PI * x)").unwrap();
+        let prompt_trace = Scatter::new(x_trace, shaper.baked_function.clone().into())
+            .mode(plotly::common::Mode::Markers)
+            .name("LUT Prompt");
+        let mut random_x = Vec::new();
+        let mut random_y = Vec::new();
+        for _ in 0..8192 {
+            let x = SAMPLE_MIN + (2.0 * random::<f32>());
+            random_x.push(x);
+            let y = shaper.process(x);
+            random_y.push(y);
         }
 
+        let random_trace = Scatter::new(random_x, random_y)
+            .mode(plotly::common::Mode::Markers)
+            .name("Random");
+
         let mut plot = Plot::new();
-        plot.add_trace(Scatter::new(vec_x, vec_y));
+        plot.add_traces(vec![default_trace, prompt_trace, random_trace]);
         plot.write_html("plot.html");
-    } 
+    }
 }

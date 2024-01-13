@@ -1,5 +1,5 @@
-mod shaper;
 mod editor;
+mod shaper;
 
 use nih_plug::prelude::*;
 use nih_plug_vizia::ViziaState;
@@ -26,14 +26,12 @@ struct MathshaperParams {
     pub dry: FloatParam,
     #[id = "wet"]
     pub wet: FloatParam,
-
 }
 
 impl Default for Mathshaper {
     fn default() -> Self {
-        let mut shaper = Shaper::default();
+        let shaper = Shaper::default();
         // shaper.prompt("tanh(2 * x + (x * x) * sin(x * (abs(x) + 10) * 5) * 2)".to_owned());
-        shaper.prompt("tanh(5 * x)".to_owned());
         Self {
             params: Arc::new(MathshaperParams::default()),
             shaper: Arc::new(shaper),
@@ -115,7 +113,6 @@ impl Plugin for Mathshaper {
         names: PortNames::const_default(),
     }];
 
-
     const MIDI_INPUT: MidiConfig = MidiConfig::None;
     const MIDI_OUTPUT: MidiConfig = MidiConfig::None;
 
@@ -167,7 +164,7 @@ impl Plugin for Mathshaper {
             let wet = self.params.wet.smoothed.next();
 
             for sample in channel_samples {
-                *sample = self.shaper.calc(*sample) * wet + *sample * dry;
+                *sample = self.shaper.process(*sample) * wet + *sample * dry;
             }
         }
 
