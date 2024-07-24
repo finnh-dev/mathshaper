@@ -1,29 +1,37 @@
+use std::usize;
+
 use evalexpr::{build_operator_tree, ContextWithMutableVariables, EvalexprError, HashMapContext};
 
-const TABLE_SIZE: usize = 32;
-const INDEX_MAX: usize = TABLE_SIZE - 1;
-// const F32_RANGE: f64 = f32::MAX as f64 - f32::MIN as f64;
-#[allow(unused)]
-const SAMPLE_MAX: f32 = 1.0;
-const SAMPLE_MIN: f32 = -1.0;
-const STEP: f32 = 2.0 / INDEX_MAX as f32;
+// const TABLE_SIZE: usize = 32;
+// const INDEX_MAX: usize = TABLE_SIZE - 1;
+// // const F32_RANGE: f64 = f32::MAX as f64 - f32::MIN as f64;
+// #[allow(unused)]
+// const SAMPLE_MAX: f32 = 1.0;
+// const SAMPLE_MIN: f32 = -1.0;
+// const STEP: f32 = 2.0 / INDEX_MAX as f32;
 
-pub struct Shaper {
+pub struct Shaper<const SIZE: usize> {
     baked_function: Box<[f32]>,
     context: HashMapContext,
 }
 
-impl Default for Shaper {
+impl<const SIZE: usize> Default for Shaper<SIZE> {
     fn default() -> Self {
-        let table: Box<[f32]> = (0..TABLE_SIZE).map(Shaper::value).collect();
+        let table: Box<[f32]> = (0..SIZE).map(Shaper::<SIZE>::value).collect();
         Self {
             baked_function: table,
-            context: Shaper::default_context(),
+            context: Shaper::<SIZE>::default_context(),
         }
     }
 }
 
-impl Shaper {
+impl<const SIZE: usize> Shaper<SIZE> {
+    const INDEX_MAX: usize = SIZE - 1;
+    #[allow(unused)]
+    const SAMPLE_MAX: f32 = 1.0;
+    const SAMPLE_MIN: f32 = -1.0;
+    const STEP: f32 = 2.0 / Self::INDEX_MAX as f32;
+
     fn default_context() -> HashMapContext {
         let mut context = HashMapContext::default();
         context
@@ -49,16 +57,16 @@ impl Shaper {
     }
 
     fn index(value: f32) -> usize {
-        (((value - SAMPLE_MIN) / STEP) as usize).min(INDEX_MAX)
+        (((value - Self::SAMPLE_MIN) / Self::STEP) as usize).min(Self::INDEX_MAX)
     }
 
     pub fn value(index: usize) -> f32 {
-        SAMPLE_MIN + (index as f32 * STEP)
+        Self::SAMPLE_MIN + (index as f32 * Self::STEP)
     }
 
     fn lerp(&self, index: usize, x: f32) -> f32 {
-        if index == INDEX_MAX {
-            return self.baked_function[INDEX_MAX];
+        if index == Self::INDEX_MAX {
+            return self.baked_function[Self::INDEX_MAX];
         };
         let higher_index = index + 1;
         let y1 = self.baked_function[index];
@@ -78,7 +86,7 @@ impl Shaper {
         for (i, val) in self.baked_function.iter_mut().enumerate() {
             self.context.set_value(
                 "x".to_owned(),
-                evalexpr::Value::Float(Shaper::value(i) as f64),
+                evalexpr::Value::Float(Self::value(i) as f64),
             );
             *val = node.eval_float_with_context(&self.context)? as f32;
         }
@@ -92,9 +100,15 @@ mod test {
     use plotly::{Plot, Scatter};
     use rand::random;
 
-    use crate::shaper::{INDEX_MAX, SAMPLE_MAX, SAMPLE_MIN};
+    use crate::shaper::Shaper as GenericShaper;
 
-    use super::{Shaper, TABLE_SIZE};
+    // use crate::shaper::{INDEX_MAX, SAMPLE_MAX, SAMPLE_MIN};
+
+    // use super::{Shaper, TABLE_SIZE};
+
+    const TABLE_SIZE: usize = 32;
+
+    type Shaper = GenericShaper::<TABLE_SIZE>;
 
     #[test]
     fn test_floats() {
@@ -113,23 +127,23 @@ mod test {
 
     #[test]
     fn test_value_to_index() {
-        let index = Shaper::index(SAMPLE_MIN);
+        let index = Shaper::index(Shaper::SAMPLE_MIN);
         println!("Testing if index is 0 with input SAMPE_MIN:");
         println!("\tindex:          {}", index);
         println!("\texpected index: {}", 0);
         assert_eq!(index, 0);
 
-        let index = Shaper::index(SAMPLE_MAX);
+        let index = Shaper::index(Shaper::SAMPLE_MAX);
         println!("Testing if index is max index with input SAMPLE_MAX:");
         println!("\tindex:          {}", index);
-        println!("\texpected index: {}", INDEX_MAX);
-        assert_eq!(index, INDEX_MAX);
+        println!("\texpected index: {}", Shaper::INDEX_MAX);
+        assert_eq!(index, Shaper::INDEX_MAX);
 
-        let index = Shaper::index(SAMPLE_MAX + 2.0);
+        let index = Shaper::index(Shaper::SAMPLE_MAX + 2.0);
         println!("Testing if index is max index with input out of range:");
         println!("\tindex:          {}", index);
-        println!("\texpected index: {}", INDEX_MAX);
-        assert_eq!(index, INDEX_MAX);
+        println!("\texpected index: {}", Shaper::INDEX_MAX);
+        assert_eq!(index, Shaper::INDEX_MAX);
     }
 
     #[test]
@@ -143,7 +157,7 @@ mod test {
         // plot.add_trace(trace_lut);
 
         for _ in 0..1000 {
-            let x = SAMPLE_MIN + random::<f32>() + random::<f32>();
+            let x = Shaper::SAMPLE_MIN + random::<f32>() + random::<f32>();
             let y = shaper.lerp(Shaper::index(x), x);
             // println!("{:<2}: x={}, y={}", i, x, y);
             // println!("inaccuracy: {}", x - y);
@@ -205,7 +219,7 @@ mod test {
         let mut random_x = Vec::new();
         let mut random_y = Vec::new();
         for _ in 0..8192 {
-            let x = SAMPLE_MIN + (2.0 * random::<f32>());
+            let x = Shaper::SAMPLE_MIN + (2.0 * random::<f32>());
             random_x.push(x);
             let y = shaper.process(x);
             random_y.push(y);

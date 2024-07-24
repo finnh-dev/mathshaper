@@ -3,11 +3,13 @@ mod shaper;
 
 use nih_plug::prelude::*;
 use nih_plug_vizia::ViziaState;
-use shaper::Shaper;
+use shaper::Shaper as GenericShaper;
 use std::sync::Arc;
 // This is a shortened version of the gain example with most comments removed, check out
 // https://github.com/robbert-vdh/nih-plug/blob/master/plugins/examples/gain/src/lib.rs to get
 // started
+
+type Shaper = GenericShaper<512>;
 
 pub struct Mathshaper {
     params: Arc<MathshaperParams>,
