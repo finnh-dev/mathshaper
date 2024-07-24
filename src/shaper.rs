@@ -1,10 +1,13 @@
 use std::usize;
 
 use evalexpr::{
-    build_operator_tree, context_map, ContextWithMutableVariables, EvalexprError, HashMapContext, Value
+    build_operator_tree, context_map, ContextWithMutableVariables, EvalexprError, HashMapContext,
+    Value,
 };
 use nih_plug_vizia::vizia::{
-    context::DrawContext, vg::{self, Color}, view::Canvas
+    context::DrawContext,
+    vg::{self, Color},
+    view::Canvas,
 };
 
 use crate::math::chebychev::chebychev;

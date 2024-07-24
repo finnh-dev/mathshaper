@@ -13,11 +13,22 @@ mod shaper_view;
 #[derive(Lens)]
 struct Data {
     _params: Arc<MathshaperParams>,
+    prompt_input: String,
+}
+
+enum EditorEvent {
+    PromptChanged(String),
 }
 
 impl Model for Data {
-    fn event(&mut self, _cx: &mut EventContext, _event: &mut Event) {
-        // debug!("Editor event called: {:?}", event);
+    fn event(&mut self, _cx: &mut EventContext, event: &mut Event) {
+        debug!("Editor event called: {:?}", event);
+        event.map(|editor_event, _| match editor_event {
+            EditorEvent::PromptChanged(input) => {
+                self.prompt_input = input.clone();
+                // TODO: Change ShaperView
+            }
+        })
     }
 }
 
@@ -39,12 +50,15 @@ pub(crate) fn create(
 
         Data {
             _params: params.clone(),
+            prompt_input: String::new(),
         }
         .build(cx);
 
         HStack::new(cx, |cx| {
             VStack::new(cx, |cx| {
                 Label::new(cx, "PRE");
+                Textbox::new(cx, Data::prompt_input)
+                    .on_edit(|cx, input| cx.emit(EditorEvent::PromptChanged(input)));
             })
             .class("side-container");
 

@@ -16,7 +16,9 @@ pub struct ShaperView {
 impl ShaperView {
     pub fn new(cx: &mut Context) -> Handle<Self> {
         let mut shape = Shaper::default();
-        shape.prompt("math::tanh(x) * 1.3130352855").expect("prompt failed!");
+        shape
+            .prompt("math::tanh(x) * 1.3130352855")
+            .expect("prompt failed!");
         Self { shape }.build(cx, |_cx| ())
     }
 }
