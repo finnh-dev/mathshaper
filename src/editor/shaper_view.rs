@@ -14,14 +14,18 @@ pub struct ShaperView {
 }
 
 impl ShaperView {
-    pub fn new(cx: &mut Context) -> Handle<Self> { 
+    pub fn new(cx: &mut Context) -> Handle<Self> {
         let mut shape = Shaper::default();
-        shape.prompt("4 * x ^ 3 - 3 * x").expect("prompt failed!");
+        shape.prompt("Cheb(x, 20)").expect("prompt failed!");
         Self { shape }.build(cx, |_cx| ())
     }
 }
 
 impl View for ShaperView {
+    fn element(&self) -> Option<&'static str> {
+        Some("shaper_view")
+    }
+
     fn draw(&self, cx: &mut DrawContext, canvas: &mut Canvas) {
         let bounds = cx.bounds();
         let grid_color = vg::Paint::color(Color::rgb(255, 255, 255)).with_line_width(1.0);

@@ -12,7 +12,7 @@ mod shaper_view;
 
 #[derive(Lens)]
 struct Data {
-    params: Arc<MathshaperParams>,
+    _params: Arc<MathshaperParams>,
 }
 
 impl Model for Data {
@@ -38,7 +38,7 @@ pub(crate) fn create(
             .expect("Failed to load stylesheet");
 
         Data {
-            params: params.clone(),
+            _params: params.clone(),
         }
         .build(cx);
 

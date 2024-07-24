@@ -1,7 +1,16 @@
 use std::usize;
 
-use evalexpr::{build_operator_tree, ContextWithMutableVariables, EvalexprError, HashMapContext};
-use nih_plug_vizia::vizia::{layout::BoundingBox, vg::{self, Color}, view::Canvas};
+use evalexpr::{
+    build_operator_tree, context_map, ContextWithMutableVariables, EvalexprError, HashMapContext,
+    Value,
+};
+use nih_plug_vizia::vizia::{
+    layout::BoundingBox,
+    vg::{self, Color},
+    view::Canvas,
+};
+
+use crate::math::chebychev::chebychev;
 
 pub struct Shaper<const SIZE: usize> {
     baked_function: Box<[f32]>,
@@ -26,15 +35,28 @@ impl<const SIZE: usize> Shaper<SIZE> {
     const STEP: f32 = 2.0 / Self::INDEX_MAX as f32;
 
     fn default_context() -> HashMapContext {
-        let mut context = HashMapContext::default();
-        context
-            .set_value(
-                "PI".to_owned(),
-                evalexpr::Value::Float(std::f64::consts::PI),
-            )
-            .expect("Default constant assignment should not panic.");
+        // let mut context = HashMapContext::default();
+        // context
+        //     .set_value(
+        //         "PI".to_owned(),
+        //         evalexpr::Value::Float(std::f64::consts::PI),
+        //     )
+        //     .expect("Default constant assignment should not panic.");
 
-        context
+        // context
+        context_map! {
+            "PI" => evalexpr::Value::Float(std::f64::consts::PI),
+            "Cheb" => Function::new(|args| {
+                let args = args.as_tuple()?;
+
+                if let (Value::Float(x), Value::Int(n)) = (&args[0], &args[1]) {
+                    Ok(Value::Float(chebychev(x, n)?))
+                } else {
+                    Err(EvalexprError::expected_number(args[0].clone()))
+                }
+            }),
+        }
+        .expect("Failed to initialize contex map!")
     }
 
     #[allow(unused)]
@@ -73,14 +95,15 @@ impl<const SIZE: usize> Shaper<SIZE> {
         y1 + (delta_y * position)
     }
 
-    #[allow(unused)]
     pub fn prompt(&mut self, prompt: &str) -> Result<(), EvalexprError> {
         let node = build_operator_tree(prompt)?;
         for (i, val) in self.baked_function.iter_mut().enumerate() {
-            self.context.set_value(
-                "x".to_owned(),
-                evalexpr::Value::Float(Self::value(i) as f64),
-            );
+            self.context
+                .set_value(
+                    "x".to_owned(),
+                    evalexpr::Value::Float(Self::value(i) as f64),
+                )
+                .expect("Failed to initialize context!");
             *val = node.eval_float_with_context(&self.context)? as f32;
         }
         Ok(())

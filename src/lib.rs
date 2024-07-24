@@ -1,4 +1,5 @@
 mod editor;
+mod math;
 mod shaper;
 
 use nih_plug::prelude::*;
