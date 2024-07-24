@@ -1,13 +1,10 @@
 use std::usize;
 
 use evalexpr::{
-    build_operator_tree, context_map, ContextWithMutableVariables, EvalexprError, HashMapContext,
-    Value,
+    build_operator_tree, context_map, ContextWithMutableVariables, EvalexprError, HashMapContext, Value
 };
 use nih_plug_vizia::vizia::{
-    layout::BoundingBox,
-    vg::{self, Color},
-    view::Canvas,
+    context::DrawContext, vg::{self, Color}, view::Canvas
 };
 
 use crate::math::chebychev::chebychev;
@@ -35,24 +32,14 @@ impl<const SIZE: usize> Shaper<SIZE> {
     const STEP: f32 = 2.0 / Self::INDEX_MAX as f32;
 
     fn default_context() -> HashMapContext {
-        // let mut context = HashMapContext::default();
-        // context
-        //     .set_value(
-        //         "PI".to_owned(),
-        //         evalexpr::Value::Float(std::f64::consts::PI),
-        //     )
-        //     .expect("Default constant assignment should not panic.");
-
-        // context
         context_map! {
             "PI" => evalexpr::Value::Float(std::f64::consts::PI),
             "Cheb" => Function::new(|args| {
                 let args = args.as_tuple()?;
-
                 if let (Value::Float(x), Value::Int(n)) = (&args[0], &args[1]) {
                     Ok(Value::Float(chebychev(x, n)?))
                 } else {
-                    Err(EvalexprError::expected_number(args[0].clone()))
+                    Err(EvalexprError::expected_number(args[0].clone())) // TODO: improve error reporting
                 }
             }),
         }
@@ -103,16 +90,18 @@ impl<const SIZE: usize> Shaper<SIZE> {
                     "x".to_owned(),
                     evalexpr::Value::Float(Self::value(i) as f64),
                 )
-                .expect("Failed to initialize context!");
+                .expect("Failed to set context!");
             *val = node.eval_float_with_context(&self.context)? as f32;
         }
         Ok(())
     }
 
-    pub fn display(&self, bounds: &BoundingBox, canvas: &mut Canvas) {
+    pub fn display(&self, cx: &mut DrawContext, canvas: &mut Canvas) {
+        let bounds = cx.bounds();
+        let line_width = cx.scale_factor() * 1.5;
         let x_step = bounds.w / Self::INDEX_MAX as f32;
 
-        let plot_color = vg::Paint::color(Color::rgb(0, 255, 0)).with_line_width(1.0);
+        let plot_paint = vg::Paint::color(Color::rgb(0, 255, 0)).with_line_width(line_width);
         let mut plot = vg::Path::new();
         plot.move_to(
             bounds.x,
@@ -124,7 +113,7 @@ impl<const SIZE: usize> Shaper<SIZE> {
                 bounds.y + (bounds.h / 2.0) - ((bounds.h / 2.0) * y),
             );
         }
-        canvas.stroke_path(&plot, &plot_color);
+        canvas.stroke_path(&plot, &plot_paint);
     }
 }
 
