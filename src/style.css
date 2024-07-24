@@ -1,0 +1,15 @@
+.main-row {
+    background-color: rgb(20, 20, 20);
+    col-between: 0px;
+}
+
+.side-container {
+    width: 1s;
+    color: black;
+    background-color: #ffffff;
+}
+
+.main-container {
+    color: white;
+    width: 2s;
+}

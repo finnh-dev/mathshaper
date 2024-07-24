@@ -52,7 +52,7 @@ impl Shaper {
         (((value - SAMPLE_MIN) / STEP) as usize).min(INDEX_MAX)
     }
 
-    fn value(index: usize) -> f32 {
+    pub fn value(index: usize) -> f32 {
         SAMPLE_MIN + (index as f32 * STEP)
     }
 
