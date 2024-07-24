@@ -1,6 +1,7 @@
 use std::usize;
 
 use evalexpr::{build_operator_tree, ContextWithMutableVariables, EvalexprError, HashMapContext};
+use nih_plug_vizia::vizia::{layout::BoundingBox, vg::{self, Color}, view::Canvas};
 
 pub struct Shaper<const SIZE: usize> {
     baked_function: Box<[f32]>,
@@ -84,6 +85,24 @@ impl<const SIZE: usize> Shaper<SIZE> {
         }
         Ok(())
     }
+
+    pub fn display(&self, bounds: &BoundingBox, canvas: &mut Canvas) {
+        let x_step = bounds.w / Self::INDEX_MAX as f32;
+
+        let plot_color = vg::Paint::color(Color::rgb(0, 255, 0)).with_line_width(1.0);
+        let mut plot = vg::Path::new();
+        plot.move_to(
+            bounds.x,
+            bounds.y + (bounds.h / 2.0) - ((bounds.h / 2.0) * self.baked_function[0]),
+        );
+        for (i, y) in self.baked_function.iter().enumerate() {
+            plot.line_to(
+                bounds.x + (i as f32 * x_step),
+                bounds.y + (bounds.h / 2.0) - ((bounds.h / 2.0) * y),
+            );
+        }
+        canvas.stroke_path(&plot, &plot_color);
+    }
 }
 
 #[cfg(test)]
@@ -93,10 +112,6 @@ mod test {
     use rand::random;
 
     use crate::shaper::Shaper as GenericShaper;
-
-    // use crate::shaper::{INDEX_MAX, SAMPLE_MAX, SAMPLE_MIN};
-
-    // use super::{Shaper, TABLE_SIZE};
 
     const TABLE_SIZE: usize = 32;
 
@@ -141,60 +156,11 @@ mod test {
     #[test]
     fn test_interpolate() {
         let shaper = Shaper::default();
-        // let mut plot = Plot::new();
-        // let lut_vec = shaper.lut.iter().map(|x| x.clone()).collect::<Vec<f32>>();
-        // let x_range = 0..TABLE_SIZE;
-        // let x_vec = x_range.collect::<Vec<usize>>().iter().map(|x| Shaper::value_from_index(x.to_owned())).collect::<Vec<f32>>();
-        // let trace_lut = Scatter::new(x_vec.clone(), lut_vec);
-        // plot.add_trace(trace_lut);
-
         for _ in 0..1000 {
             let x = Shaper::SAMPLE_MIN + random::<f32>() + random::<f32>();
             let y = shaper.lerp(Shaper::index(x), x);
-            // println!("{:<2}: x={}, y={}", i, x, y);
-            // println!("inaccuracy: {}", x - y);
             assert_eq!(x, y)
         }
-
-        // let mut shaper = Shaper::default();
-        // for i in 0..shaper.lut.len() {
-        //     shaper.lut[i] = f32::sin(std::f32::consts::PI * Shaper::value_from_index(i));
-        // }
-
-        // // let mut interpolated_sin: Vec<(f32, f32)> = Vec::new();
-        // // let expected_sin = x_vec.iter().map(|x| f32::sin(std::f32::consts::PI * x)).collect::<Vec<f32>>();
-        // // let expected_sin_trace = Scatter::new(x_vec, expected_sin).name("expected");
-
-        // let mut inaccuracies : Vec<f32> = Vec::new();
-
-        // let mut max_inaccuracy = 0.0;
-        // let mut most_inaccurate = (0, 0.0, 0.0, 0.0);
-        // for i in 0..100000000 {
-        //     let x = SAMPE_MIN + random::<f32>() + random::<f32>();
-        //     let y = shaper.interpolate(Shaper::nearest_lower_index(x), x);
-        //     // interpolated_sin.push((x, y));
-        //     let expected = f32::sin(std::f32::consts::PI * x);
-        //     // println!("{:<2}:\n\tx={}\n\ty={}", i, x, y);
-
-        //     let inaccuracy = expected - y;
-        //     inaccuracies.push(inaccuracy);
-        //     if inaccuracy > max_inaccuracy {
-        //         max_inaccuracy = inaccuracy;
-        //         most_inaccurate = (Shaper::nearest_lower_index(x), x, expected, y);
-        //     };
-        //     // println!("inaccuracy: {}", x - y);
-        // }
-        // println!("max inaccuracy: {}", max_inaccuracy);
-        // println!("most inaccurate: {:?}", most_inaccurate);
-        // let mean_inaccuracy = inaccuracies.iter().sum::<f32>() / inaccuracies.len() as f32;
-        // println!("average: {}", mean_inaccuracy);
-
-        // interpolated_sin.sort_by(|(x1, _), (x2, _)| x1.total_cmp(x2));
-        // let (sin_x, sin_y): (Vec<f32>, Vec<f32>) = interpolated_sin.into_iter().unzip();
-        // let sin_trace = Scatter::new(sin_x, sin_y).name("sin lut").mode(plotly::common::Mode::Markers);
-        // plot.add_trace(sin_trace);
-        // plot.add_trace(expected_sin_trace);
-        // plot.write_html("plot.html");
     }
 
     #[test]

@@ -2,7 +2,6 @@ use nih_plug::log::debug;
 use nih_plug::prelude::Editor;
 use nih_plug_vizia::vizia::prelude::*;
 
-use nih_plug_vizia::{assets, widgets::*};
 use nih_plug_vizia::{create_vizia_editor, ViziaState, ViziaTheming};
 use shaper_view::ShaperView;
 use std::sync::Arc;
@@ -17,14 +16,14 @@ struct Data {
 }
 
 impl Model for Data {
-    fn event(&mut self, _cx: &mut EventContext, event: &mut Event) {
+    fn event(&mut self, _cx: &mut EventContext, _event: &mut Event) {
         // debug!("Editor event called: {:?}", event);
     }
 }
 
 // Makes sense to also define this here, makes it a bit easier to keep track of
 pub(crate) fn default_state() -> Arc<ViziaState> {
-    ViziaState::new(|| (1200, 600))
+    ViziaState::new(|| (900, 450))
 }
 
 pub(crate) fn create(
@@ -50,7 +49,7 @@ pub(crate) fn create(
             .class("side-container");
 
             VStack::new(cx, |cx| {
-                ShaperView::new(cx);
+                ShaperView::new(cx); // TODO: Resizing layout, keep at square
             })
             .class("main-container");
 
@@ -60,23 +59,5 @@ pub(crate) fn create(
             .class("side-container");
         })
         .class("main-row");
-
-        // VStack::new(cx, |cx| {
-        //     Label::new(cx, "Mathshaper GUI")
-        //         .font_family(vec![FamilyOwned::Name(String::from(assets::NOTO_SANS))])
-        //         .font_weight(FontWeightKeyword::Thin)
-        //         .font_size(30.0)
-        //         .height(Pixels(50.0))
-        //         .child_top(Stretch(1.0))
-        //         .child_bottom(Pixels(0.0));
-
-        //     Label::new(cx, "Wet");
-        //     ParamSlider::new(cx, Data::params, |params| &params.wet);
-        // })
-        // .row_between(Pixels(0.0))
-        // .child_left(Stretch(1.0))
-        // .child_right(Stretch(1.0));
-
-        // ResizeHandle::new(cx);
     })
 }
