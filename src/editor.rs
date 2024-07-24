@@ -39,7 +39,7 @@ pub(crate) fn default_state() -> Arc<ViziaState> {
 
 pub(crate) fn create(
     params: Arc<MathshaperParams>,
-    editor_state: Arc<ViziaState>,
+    editor_state: Arc<ViziaState>, 
 ) -> Option<Box<dyn Editor>> {
     create_vizia_editor(editor_state, ViziaTheming::Custom, move |cx, _| {
         debug!("Creating view...");
