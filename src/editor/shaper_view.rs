@@ -6,7 +6,6 @@ use rand::random;
 
 const TABLE_SIZE: usize = 512;
 
-
 pub struct ShaperView {
     shape: Box<[f32]>,
 }
@@ -34,12 +33,16 @@ impl View for ShaperView {
 
         let plot_color = vg::Paint::color(Color::rgb(0, 255, 0)).with_line_width(1.0);
         let mut plot = vg::Path::new();
-        plot.move_to(bounds.x, bounds.y + (bounds.h / 2.0) - ((bounds.h / 2.0) * self.shape[0]));
+        plot.move_to(
+            bounds.x,
+            bounds.y + (bounds.h / 2.0) - ((bounds.h / 2.0) * self.shape[0]),
+        );
         for (i, y) in self.shape.iter().enumerate() {
-            plot.line_to(bounds.x + (i as f32 * x_step), bounds.y + (bounds.h / 2.0) - ((bounds.h / 2.0) * y));
+            plot.line_to(
+                bounds.x + (i as f32 * x_step),
+                bounds.y + (bounds.h / 2.0) - ((bounds.h / 2.0) * y),
+            );
         }
         canvas.stroke_path(&plot, &plot_color);
-
-
     }
 }

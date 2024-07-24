@@ -2,14 +2,6 @@ use std::usize;
 
 use evalexpr::{build_operator_tree, ContextWithMutableVariables, EvalexprError, HashMapContext};
 
-// const TABLE_SIZE: usize = 32;
-// const INDEX_MAX: usize = TABLE_SIZE - 1;
-// // const F32_RANGE: f64 = f32::MAX as f64 - f32::MIN as f64;
-// #[allow(unused)]
-// const SAMPLE_MAX: f32 = 1.0;
-// const SAMPLE_MIN: f32 = -1.0;
-// const STEP: f32 = 2.0 / INDEX_MAX as f32;
-
 pub struct Shaper<const SIZE: usize> {
     baked_function: Box<[f32]>,
     context: HashMapContext,
@@ -108,7 +100,7 @@ mod test {
 
     const TABLE_SIZE: usize = 32;
 
-    type Shaper = GenericShaper::<TABLE_SIZE>;
+    type Shaper = GenericShaper<TABLE_SIZE>;
 
     #[test]
     fn test_floats() {
