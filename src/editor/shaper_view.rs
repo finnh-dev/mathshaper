@@ -1,24 +1,18 @@
+use std::sync::{Arc, Mutex};
+
 use nih_plug_vizia::vizia::{
     prelude::*,
     vg::{self, Color},
 };
 
-use crate::shaper::Shaper as GenericShaper;
-
-const TABLE_SIZE: usize = 512;
-
-type Shaper = GenericShaper<TABLE_SIZE>;
+use crate::editor::Shaper;
 
 pub struct ShaperView {
-    shape: Shaper,
+    shape: Arc<Mutex<Shaper>>,
 }
 
 impl ShaperView {
-    pub fn new(cx: &mut Context) -> Handle<Self> {
-        let mut shape = Shaper::default();
-        shape
-            .prompt("math::tanh(x) * 1.3130352855")
-            .expect("prompt failed!");
+    pub fn new(cx: &mut Context, shape: Arc<Mutex<Shaper>>) -> Handle<Self> {
         Self { shape }.build(cx, |_cx| ())
     }
 }
@@ -39,6 +33,7 @@ impl View for ShaperView {
         grid.line_to(bounds.x + bounds.w, bounds.y + bounds.h / 2.0);
 
         canvas.stroke_path(&grid, &grid_paint);
-        self.shape.display(cx, canvas);
+        let lock = self.shape.lock().unwrap(); // TODO: Error Handling
+        lock.display(cx, canvas);
     }
 }
