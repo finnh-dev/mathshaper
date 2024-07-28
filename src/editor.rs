@@ -4,6 +4,8 @@ use nih_plug_vizia::vizia::prelude::*;
 
 use nih_plug_vizia::{create_vizia_editor, ViziaState, ViziaTheming};
 use shaper_view::ShaperView;
+use std::fs::File;
+use std::io::{BufReader, Read};
 use std::sync::{Arc, Mutex};
 
 use crate::MathshaperParams;
@@ -19,38 +21,29 @@ mod shaper_view;
 #[derive(Lens)]
 struct Data {
     _params: Arc<MathshaperParams>,
+    shaper: Arc<Mutex<Shaper>>,
+}
+
+enum EditorEvent {
+    Generate
 }
 
 impl Model for Data {
-    fn event(&mut self, _cx: &mut EventContext, _event: &mut Event) {
-        
-    }
-}
-
-#[derive(Lens)]
-struct TextInputData {
-    input: String,
-    shaper: Arc<Mutex<Shaper>>
-}
-
-impl Model for TextInputData {
     fn event(&mut self, _cx: &mut EventContext, event: &mut Event) {
         event.map(
-            |text_input_event: &PromptInputEvent, _| match text_input_event {
-                PromptInputEvent::PromptChanged(input) => {
-                    self.input = input.to_owned();
-                },
-                PromptInputEvent::Generate => {
-                    let mut lock = self.shaper.lock().unwrap(); // TODO: Remove unwrap
-                    lock.prompt(&self.input).unwrap(); // TODO: Remove unwrap
+            |text_input_event: &EditorEvent, _| match text_input_event {
+                EditorEvent::Generate => {
+                    let text_file = File::open(r"C:\Users\Finn\Development\Audio\Projects\mathshaper\ressources\text_input.txt").unwrap();
+                    let mut reader = BufReader::new(text_file);
+                    let mut prompt = String::new();
+                    reader.read_to_string(&mut prompt).unwrap();
+                    
+                    let mut lock = self.shaper.lock().unwrap(); // TODO: Error Handling Poison Error
+                    lock.prompt(&prompt).unwrap(); // TODO: Error Handling Prompt Error
                 }
             },
         )
     }
-}
-enum PromptInputEvent {
-    PromptChanged(String),
-    Generate
 }
 
 // Makes sense to also define this here, makes it a bit easier to keep track of
@@ -72,16 +65,16 @@ pub(crate) fn create(
         let shaper = Arc::new(Mutex::default());
         Data {
             _params: params.clone(),
+            shaper: shaper.clone(),
         }
         .build(cx);
 
         HStack::new(cx, move |cx| {
-            let shaper_copy = shaper.clone();
             VStack::new(cx, move|cx| {
                 Label::new(cx, "PRE");
-                Button::new(cx, move |_cx| {
-                    prompt_input_modal(shaper_copy.clone());
-                }, |cx| Label::new(cx, "Edit"));
+                Button::new(cx, move |cx| {
+                    cx.emit(EditorEvent::Generate);
+                }, |cx| Label::new(cx, "Reload"));
             })
             .class("side-container");
 
@@ -97,30 +90,4 @@ pub(crate) fn create(
         })
         .class("main-row");
     })
-}
-
-fn prompt_input_modal(shaper: Arc<Mutex<Shaper>>) {
-    std::thread::spawn(move || {
-        Application::new(move |cx| {
-            TextInputData {
-                input: String::new(),
-                shaper: shaper.clone()
-            }
-            .build(cx);
-            Textbox::new(cx, TextInputData::input)
-                .on_edit(move |cx, text| cx.emit(PromptInputEvent::PromptChanged(text)))
-                .width(Pixels(200.0))
-                .height(Pixels(30.0));
-            Button::new(cx, |cx| {
-                cx.emit(PromptInputEvent::Generate);
-            },
-            |cx| Label::new(cx, "Generate"));
-        })
-        .title("Text Input")
-        .inner_size(WindowSize {
-            width: 200,
-            height: 60,
-        })
-        .run();
-    });
 }
