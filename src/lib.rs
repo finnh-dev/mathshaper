@@ -2,6 +2,7 @@ mod editor;
 mod math;
 mod shaper;
 
+use core::f32;
 use nih_plug::prelude::*;
 use nih_plug_vizia::ViziaState;
 use shaper::Shaper as GenericShaper;
@@ -15,6 +16,8 @@ type Shaper = GenericShaper<512>;
 pub struct Mathshaper {
     params: Arc<MathshaperParams>,
     shaper: Arc<Shaper>,
+    peak_max: Arc<AtomicF32>,
+    peak_min: Arc<AtomicF32>,
 }
 
 #[derive(Params)]
@@ -25,10 +28,12 @@ struct MathshaperParams {
     /// gain parameter is stored as linear gain while the values are displayed in decibels.
     #[persist = "editor-state"]
     editor_state: Arc<ViziaState>,
-    #[id = "dry"]
-    pub dry: FloatParam,
-    #[id = "wet"]
-    pub wet: FloatParam,
+    #[id = "pre_gain"]
+    pub pre_gain: FloatParam,
+    #[id = "post_gain"]
+    pub post_gain: FloatParam,
+    #[id = "decay"]
+    pub decay: FloatParam,
 }
 
 impl Default for Mathshaper {
@@ -38,6 +43,8 @@ impl Default for Mathshaper {
         Self {
             params: Arc::new(MathshaperParams::default()),
             shaper: Arc::new(shaper),
+            peak_max: Arc::default(),
+            peak_min: Arc::default(),
         }
     }
 }
@@ -49,8 +56,8 @@ impl Default for MathshaperParams {
             // to treat these kinds of parameters as if we were dealing with decibels. Storing this
             // as decibels is easier to work with, but requires a conversion for every sample.
             editor_state: editor::default_state(),
-            dry: FloatParam::new(
-                "Dry",
+            pre_gain: FloatParam::new(
+                "Pre Gain",
                 util::db_to_gain(-30.0),
                 FloatRange::Skewed {
                     min: util::db_to_gain(-30.0),
@@ -69,8 +76,8 @@ impl Default for MathshaperParams {
             // `.with_step_size(0.1)` function to get internal rounding.
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
-            wet: FloatParam::new(
-                "Wet",
+            post_gain: FloatParam::new(
+                "Post Gain",
                 util::db_to_gain(0.0),
                 FloatRange::Skewed {
                     min: util::db_to_gain(-30.0),
@@ -89,6 +96,7 @@ impl Default for MathshaperParams {
             // `.with_step_size(0.1)` function to get internal rounding.
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+            decay: FloatParam::new("decay", 0.4, FloatRange::Linear { min: 0.0, max: 3.0 }),
         }
     }
 }
@@ -135,7 +143,12 @@ impl Plugin for Mathshaper {
     }
 
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
-        editor::create(self.params.clone(), self.params.editor_state.clone())
+        editor::create(
+            self.params.clone(),
+            self.params.editor_state.clone(),
+            self.peak_max.clone(),
+            self.peak_min.clone(),
+        )
     }
 
     fn initialize(
@@ -163,12 +176,37 @@ impl Plugin for Mathshaper {
     ) -> ProcessStatus {
         for channel_samples in buffer.iter_samples() {
             // Smoothing is optionally built into the parameters themselves
-            let dry = self.params.dry.smoothed.next();
-            let wet = self.params.wet.smoothed.next();
+            let pre_gain = self.params.pre_gain.smoothed.next();
+            let post_gain = self.params.post_gain.smoothed.next();
 
+            let mut new_peak_max = f32::MIN;
+            let mut new_peak_min = f32::MAX;
             for sample in channel_samples {
-                *sample = self.shaper.process(*sample) * wet + *sample * dry;
+                *sample = *sample * pre_gain;
+                new_peak_max = new_peak_max.max(*sample);
+                new_peak_min = new_peak_min.min(*sample);
+                *sample = self.shaper.process(*sample) * post_gain;
             }
+
+            let old_peak_max = self.peak_max.load(std::sync::atomic::Ordering::Relaxed);
+            let old_peak_min = self.peak_min.load(std::sync::atomic::Ordering::Relaxed);
+            let decay = self.params.decay.value() / 100000.0; // TODO: Improve decay
+
+            let peak_max = if new_peak_max > old_peak_max {
+                new_peak_max
+            } else {
+                old_peak_max * (1.0 - decay)
+            };
+            let peak_min = if new_peak_min < old_peak_min {
+                new_peak_min
+            } else {
+                old_peak_min * (1.0 - decay)
+            };
+
+            self.peak_max
+                .store(peak_max, std::sync::atomic::Ordering::Relaxed);
+            self.peak_min
+                .store(peak_min, std::sync::atomic::Ordering::Relaxed);
         }
 
         ProcessStatus::Normal
