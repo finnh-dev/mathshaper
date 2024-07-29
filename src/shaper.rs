@@ -13,7 +13,7 @@ use nih_plug_vizia::vizia::{
 use crate::math::chebychev::chebychev;
 
 pub struct Shaper<const SIZE: usize> {
-    baked_function: Box<[f32]>,
+    table: Box<[f32]>,
     context: HashMapContext,
 }
 
@@ -21,7 +21,7 @@ impl<const SIZE: usize> Default for Shaper<SIZE> {
     fn default() -> Self {
         let table: Box<[f32]> = (0..SIZE).map(Shaper::<SIZE>::value).collect();
         Self {
-            baked_function: table,
+            table,
             context: Shaper::<SIZE>::default_context(),
         }
     }
@@ -29,9 +29,8 @@ impl<const SIZE: usize> Default for Shaper<SIZE> {
 
 impl<const SIZE: usize> Shaper<SIZE> {
     const INDEX_MAX: usize = SIZE - 1;
-    #[allow(unused)]
-    const SAMPLE_MAX: f32 = 1.0;
-    const SAMPLE_MIN: f32 = -1.0;
+    const INPUT_SAMPLE_MAX: f32 = 1.0;
+    const INPUT_SAMPLE_MIN: f32 = -Self::INPUT_SAMPLE_MAX;
     const STEP: f32 = 2.0 / Self::INDEX_MAX as f32;
 
     fn default_context() -> HashMapContext {
@@ -62,21 +61,21 @@ impl<const SIZE: usize> Shaper<SIZE> {
     }
 
     fn index(value: f32) -> usize {
-        (((value - Self::SAMPLE_MIN) / Self::STEP) as usize).min(Self::INDEX_MAX)
+        (((value - Self::INPUT_SAMPLE_MIN) / Self::STEP) as usize).min(Self::INDEX_MAX)
     }
 
     pub fn value(index: usize) -> f32 {
-        Self::SAMPLE_MIN + (index as f32 * Self::STEP)
+        Self::INPUT_SAMPLE_MIN + (index as f32 * Self::STEP)
     }
 
     fn lerp(&self, index: usize, x: f32) -> f32 {
         if index == Self::INDEX_MAX {
-            return self.baked_function[Self::INDEX_MAX];
+            return self.table[Self::INDEX_MAX];
         };
         let higher_index = index + 1;
-        let y1 = self.baked_function[index];
+        let y1 = self.table[index];
         let x1 = Self::value(index);
-        let y2 = self.baked_function[higher_index];
+        let y2 = self.table[higher_index];
         let x2 = Self::value(higher_index);
 
         let delta_y = y1 - y2;
@@ -85,9 +84,22 @@ impl<const SIZE: usize> Shaper<SIZE> {
         y1 + (delta_y * position)
     }
 
+    pub fn normalize(&mut self) {
+        let max_abs = self
+            .table
+            .iter()
+            .map(|&value| value.abs())
+            .max_by(|a, b| a.partial_cmp(b).expect("NaN Error"))
+            .expect("Table can't be empty");
+
+        for value in self.table.iter_mut() {
+            *value = *value / max_abs;
+        }
+    }
+
     pub fn prompt(&mut self, prompt: &str) -> Result<(), EvalexprError> {
         let node = build_operator_tree(prompt)?;
-        for (i, val) in self.baked_function.iter_mut().enumerate() {
+        for (i, val) in self.table.iter_mut().enumerate() {
             self.context
                 .set_value(
                     "x".to_owned(),
@@ -108,9 +120,9 @@ impl<const SIZE: usize> Shaper<SIZE> {
         let mut plot = vg::Path::new();
         plot.move_to(
             bounds.x,
-            bounds.y + (bounds.h / 2.0) - ((bounds.h / 2.0) * self.baked_function[0]),
+            bounds.y + (bounds.h / 2.0) - ((bounds.h / 2.0) * self.table[0]),
         );
-        for (i, y) in self.baked_function.iter().enumerate() {
+        for (i, y) in self.table.iter().enumerate() {
             plot.line_to(
                 bounds.x + (i as f32 * x_step),
                 bounds.y + (bounds.h / 2.0) - ((bounds.h / 2.0) * y),
@@ -149,19 +161,19 @@ mod test {
 
     #[test]
     fn test_value_to_index() {
-        let index = Shaper::index(Shaper::SAMPLE_MIN);
+        let index = Shaper::index(Shaper::INPUT_SAMPLE_MIN);
         println!("Testing if index is 0 with input SAMPE_MIN:");
         println!("\tindex:          {}", index);
         println!("\texpected index: {}", 0);
         assert_eq!(index, 0);
 
-        let index = Shaper::index(Shaper::SAMPLE_MAX);
+        let index = Shaper::index(Shaper::INPUT_SAMPLE_MAX);
         println!("Testing if index is max index with input SAMPLE_MAX:");
         println!("\tindex:          {}", index);
         println!("\texpected index: {}", Shaper::INDEX_MAX);
         assert_eq!(index, Shaper::INDEX_MAX);
 
-        let index = Shaper::index(Shaper::SAMPLE_MAX + 2.0);
+        let index = Shaper::index(Shaper::INPUT_SAMPLE_MAX + 2.0);
         println!("Testing if index is max index with input out of range:");
         println!("\tindex:          {}", index);
         println!("\texpected index: {}", Shaper::INDEX_MAX);
@@ -172,7 +184,7 @@ mod test {
     fn test_interpolate() {
         let shaper = Shaper::default();
         for _ in 0..1000 {
-            let x = Shaper::SAMPLE_MIN + random::<f32>() + random::<f32>();
+            let x = Shaper::INPUT_SAMPLE_MIN + random::<f32>() + random::<f32>();
             let y = shaper.lerp(Shaper::index(x), x);
             assert_eq!(x, y)
         }
@@ -182,17 +194,17 @@ mod test {
     fn test_prompt() {
         let x_trace: Vec<f32> = (0..TABLE_SIZE).map(Shaper::value).collect();
         let mut shaper = Shaper::default();
-        let default_trace = Scatter::new(x_trace.clone(), shaper.baked_function.clone().into())
+        let default_trace = Scatter::new(x_trace.clone(), shaper.table.clone().into())
             .mode(plotly::common::Mode::Markers)
             .name("LUT Default");
         shaper.prompt("math::sin(3 * PI * x)").unwrap();
-        let prompt_trace = Scatter::new(x_trace, shaper.baked_function.clone().into())
+        let prompt_trace = Scatter::new(x_trace, shaper.table.clone().into())
             .mode(plotly::common::Mode::Markers)
             .name("LUT Prompt");
         let mut random_x = Vec::new();
         let mut random_y = Vec::new();
         for _ in 0..8192 {
-            let x = Shaper::SAMPLE_MIN + (2.0 * random::<f32>());
+            let x = Shaper::INPUT_SAMPLE_MIN + (2.0 * random::<f32>());
             random_x.push(x);
             let y = shaper.process(x);
             random_y.push(y);
