@@ -6,19 +6,22 @@ use core::f32;
 use nih_plug::prelude::*;
 use nih_plug_vizia::ViziaState;
 use shaper::Shaper as GenericShaper;
-use std::sync::Arc;
+use triple_buffer::TripleBuffer;
+use std::sync::{Arc, Mutex};
 // This is a shortened version of the gain example with most comments removed, check out
 // https://github.com/robbert-vdh/nih-plug/blob/master/plugins/examples/gain/src/lib.rs to get
 // started
 
-type Shaper = GenericShaper<512>;
+type Shaper = GenericShaper<512>; // TODO: Figure out size
 
 pub struct Mathshaper {
     params: Arc<MathshaperParams>,
-    shaper: Arc<Shaper>,
     peak_max: Arc<AtomicF32>,
     peak_min: Arc<AtomicF32>,
+    shaper_input_data: Arc<Mutex<triple_buffer::Input<Shaper>>>,
+    shaper_output_data: triple_buffer::Output<Shaper>,
 }
+
 
 #[derive(Params)]
 struct MathshaperParams {
@@ -38,13 +41,13 @@ struct MathshaperParams {
 
 impl Default for Mathshaper {
     fn default() -> Self {
-        let shaper = Shaper::default();
-        // shaper.prompt("tanh(2 * x + (x * x) * sin(x * (abs(x) + 10) * 5) * 2)".to_owned());
+        let (shaper_in, shaper_out) = TripleBuffer::default().split();
         Self {
             params: Arc::new(MathshaperParams::default()),
-            shaper: Arc::new(shaper),
             peak_max: Arc::default(),
             peak_min: Arc::default(),
+            shaper_input_data: Arc::new(Mutex::new(shaper_in)),
+            shaper_output_data: shaper_out,
         }
     }
 }
@@ -58,7 +61,7 @@ impl Default for MathshaperParams {
             editor_state: editor::default_state(),
             pre_gain: FloatParam::new(
                 "Pre Gain",
-                util::db_to_gain(-30.0),
+                util::db_to_gain(0.0),
                 FloatRange::Skewed {
                     min: util::db_to_gain(-30.0),
                     max: util::db_to_gain(10.0),
@@ -148,6 +151,7 @@ impl Plugin for Mathshaper {
             self.params.editor_state.clone(),
             self.peak_max.clone(),
             self.peak_min.clone(),
+            self.shaper_input_data.clone(),
         )
     }
 
@@ -181,11 +185,14 @@ impl Plugin for Mathshaper {
 
             let mut new_peak_max = f32::MIN;
             let mut new_peak_min = f32::MAX;
+
+            let shaper_data = self.shaper_output_data.read();
+
             for sample in channel_samples {
                 *sample = *sample * pre_gain;
                 new_peak_max = new_peak_max.max(*sample);
                 new_peak_min = new_peak_min.min(*sample);
-                *sample = self.shaper.process(*sample) * post_gain;
+                *sample = shaper_data.process(*sample) * post_gain;
             }
 
             let old_peak_max = self.peak_max.load(std::sync::atomic::Ordering::Relaxed);
