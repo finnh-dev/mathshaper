@@ -6,8 +6,8 @@ use core::f32;
 use nih_plug::prelude::*;
 use nih_plug_vizia::ViziaState;
 use shaper::Shaper as GenericShaper;
-use triple_buffer::TripleBuffer;
 use std::sync::{Arc, Mutex};
+use triple_buffer::TripleBuffer;
 // This is a shortened version of the gain example with most comments removed, check out
 // https://github.com/robbert-vdh/nih-plug/blob/master/plugins/examples/gain/src/lib.rs to get
 // started
@@ -21,7 +21,6 @@ pub struct Mathshaper {
     shaper_input_data: Arc<Mutex<triple_buffer::Input<Shaper>>>,
     shaper_output_data: triple_buffer::Output<Shaper>,
 }
-
 
 #[derive(Params)]
 struct MathshaperParams {
