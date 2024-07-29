@@ -5,12 +5,12 @@ mod shaper;
 use core::f32;
 use nih_plug::prelude::*;
 use nih_plug_vizia::ViziaState;
+use rubato::{
+    Resampler, SincFixedIn, SincFixedOut, SincInterpolationParameters, SincInterpolationType,
+};
 use shaper::Shaper as GenericShaper;
-use triple_buffer::TripleBuffer;
 use std::sync::{Arc, Mutex};
-// This is a shortened version of the gain example with most comments removed, check out
-// https://github.com/robbert-vdh/nih-plug/blob/master/plugins/examples/gain/src/lib.rs to get
-// started
+use triple_buffer::TripleBuffer;
 
 type Shaper = GenericShaper<512>; // TODO: Figure out size
 
@@ -20,8 +20,9 @@ pub struct Mathshaper {
     peak_min: Arc<AtomicF32>,
     shaper_input_data: Arc<Mutex<triple_buffer::Input<Shaper>>>,
     shaper_output_data: triple_buffer::Output<Shaper>,
+    oversampler: SincFixedIn<f32>,
+    downsampler: SincFixedOut<f32>,
 }
-
 
 #[derive(Params)]
 struct MathshaperParams {
@@ -42,12 +43,40 @@ struct MathshaperParams {
 impl Default for Mathshaper {
     fn default() -> Self {
         let (shaper_in, shaper_out) = TripleBuffer::default().split();
+        let oversampler_params = SincInterpolationParameters {
+            sinc_len: 256,
+            f_cutoff: 0.95,
+            oversampling_factor: 256,
+            interpolation: SincInterpolationType::Linear,
+            window: rubato::WindowFunction::BlackmanHarris2,
+        };
+        let downsampler_params = SincInterpolationParameters {
+            sinc_len: 256,
+            f_cutoff: 0.95,
+            oversampling_factor: 256,
+            interpolation: SincInterpolationType::Linear,
+            window: rubato::WindowFunction::BlackmanHarris2,
+        };
         Self {
             params: Arc::new(MathshaperParams::default()),
             peak_max: Arc::default(),
             peak_min: Arc::default(),
             shaper_input_data: Arc::new(Mutex::new(shaper_in)),
             shaper_output_data: shaper_out,
+            oversampler: SincFixedIn::new(
+                8.0,
+                8.0,
+                oversampler_params,
+                2048,
+                2,
+            ).expect("Failed to initialize oversampler"),
+            downsampler: SincFixedOut::new(
+                1.0/8.0,
+                1.0,
+                downsampler_params,
+                2048,
+                2,
+            ).expect("Failed to initialize downsampler"),
         }
     }
 }
@@ -55,9 +84,6 @@ impl Default for Mathshaper {
 impl Default for MathshaperParams {
     fn default() -> Self {
         Self {
-            // This gain is stored as linear gain. NIH-plug comes with useful conversion functions
-            // to treat these kinds of parameters as if we were dealing with decibels. Storing this
-            // as decibels is easier to work with, but requires a conversion for every sample.
             editor_state: editor::default_state(),
             pre_gain: FloatParam::new(
                 "Pre Gain",
@@ -65,18 +91,11 @@ impl Default for MathshaperParams {
                 FloatRange::Skewed {
                     min: util::db_to_gain(-30.0),
                     max: util::db_to_gain(10.0),
-                    // This makes the range appear as if it was linear when displaying the values as
-                    // decibels
                     factor: FloatRange::gain_skew_factor(-30.0, 10.0),
                 },
             )
-            // Because the gain parameter is stored as linear gain instead of storing the value as
-            // decibels, we need logarithmic smoothing
             .with_smoother(SmoothingStyle::Logarithmic(50.0))
             .with_unit(" dB")
-            // There are many predefined formatters we can use here. If the gain was stored as
-            // decibels instead of as a linear gain value, we could have also used the
-            // `.with_step_size(0.1)` function to get internal rounding.
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
             post_gain: FloatParam::new(
@@ -85,18 +104,11 @@ impl Default for MathshaperParams {
                 FloatRange::Skewed {
                     min: util::db_to_gain(-30.0),
                     max: util::db_to_gain(10.0),
-                    // This makes the range appear as if it was linear when displaying the values as
-                    // decibels
                     factor: FloatRange::gain_skew_factor(-30.0, 10.0),
                 },
             )
-            // Because the gain parameter is stored as linear gain instead of storing the value as
-            // decibels, we need logarithmic smoothing
             .with_smoother(SmoothingStyle::Logarithmic(50.0))
             .with_unit(" dB")
-            // There are many predefined formatters we can use here. If the gain was stored as
-            // decibels instead of as a linear gain value, we could have also used the
-            // `.with_step_size(0.1)` function to get internal rounding.
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
             decay: FloatParam::new("decay", 0.4, FloatRange::Linear { min: 0.0, max: 3.0 }),
@@ -164,6 +176,9 @@ impl Plugin for Mathshaper {
         // Resize buffers and perform other potentially expensive initialization operations here.
         // The `reset()` function is always called right after this function. You can remove this
         // function if you do not need it.
+        self.oversampler.input_buffer_allocate(false);
+        self.oversampler.output_buffer_allocate(false);
+
         true
     }
 

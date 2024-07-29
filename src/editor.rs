@@ -23,7 +23,7 @@ struct Data {
     shaper: Arc<Mutex<DisplayShaper>>,
     peak_max: Arc<AtomicF32>,
     peak_min: Arc<AtomicF32>,
-    shaper_input_data: Arc<Mutex<triple_buffer::Input<DspShaper>>>
+    shaper_input_data: Arc<Mutex<triple_buffer::Input<DspShaper>>>,
 }
 
 enum EditorEvent {
@@ -57,7 +57,7 @@ impl Model for Data {
                     let shaper_input = lock.input_buffer();
                     shaper_input.normalize();
                     lock.publish();
-                }, 
+                },
             },
         )
     }
