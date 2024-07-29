@@ -6,10 +6,10 @@ use nih_plug_vizia::vizia::{
     vg::{self, Color},
 };
 
-use crate::editor::Shaper;
+use crate::editor::DisplayShaper;
 
 pub struct ShaperView {
-    shaper: Arc<Mutex<Shaper>>,
+    shaper: Arc<Mutex<DisplayShaper>>,
     peak_max: Arc<AtomicF32>,
     peak_min: Arc<AtomicF32>,
 }
@@ -22,7 +22,7 @@ impl ShaperView {
         peak_min: LPeakMin,
     ) -> Handle<Self>
     where
-        LShaper: Lens<Target = Arc<Mutex<Shaper>>>,
+        LShaper: Lens<Target = Arc<Mutex<DisplayShaper>>>,
         LPeakMax: Lens<Target = Arc<AtomicF32>>,
         LPeakMin: Lens<Target = Arc<AtomicF32>>,
     {

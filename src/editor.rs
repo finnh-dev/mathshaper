@@ -11,19 +11,19 @@ use std::sync::{Arc, Mutex};
 use crate::MathshaperParams;
 
 use crate::shaper::Shaper as GenericShaper;
-
 const TABLE_SIZE: usize = 512;
-
-type Shaper = GenericShaper<TABLE_SIZE>;
+type DisplayShaper = GenericShaper<TABLE_SIZE>;
+use crate::Shaper as DspShaper;
 
 mod shaper_view;
 
 #[derive(Lens)]
 struct Data {
     _params: Arc<MathshaperParams>,
-    shaper: Arc<Mutex<Shaper>>,
+    shaper: Arc<Mutex<DisplayShaper>>,
     peak_max: Arc<AtomicF32>,
     peak_min: Arc<AtomicF32>,
+    shaper_input_data: Arc<Mutex<triple_buffer::Input<DspShaper>>>
 }
 
 enum EditorEvent {
@@ -43,11 +43,21 @@ impl Model for Data {
 
                     let mut lock = self.shaper.lock().unwrap(); // TODO: Error Handling Poison Error
                     lock.prompt(&prompt).unwrap(); // TODO: Error Handling Prompt Error
+
+                    let mut lock = self.shaper_input_data.lock().unwrap();
+                    let shaper_input = lock.input_buffer();
+                    shaper_input.prompt(&prompt).unwrap(); // TODO: Error Handling Prompt Error
+                    lock.publish();
                 }
                 EditorEvent::Normalize => {
                     let mut lock = self.shaper.lock().unwrap(); // TODO: Error Handling Poison Error
                     lock.normalize();
-                },
+
+                    let mut lock = self.shaper_input_data.lock().unwrap(); // TODO: Error Handling Poison Error
+                    let shaper_input = lock.input_buffer();
+                    shaper_input.normalize();
+                    lock.publish();
+                }, 
             },
         )
     }
@@ -63,6 +73,7 @@ pub(crate) fn create(
     editor_state: Arc<ViziaState>,
     peak_max: Arc<AtomicF32>,
     peak_min: Arc<AtomicF32>,
+    shaper_input_data: Arc<Mutex<triple_buffer::Input<DspShaper>>>,
 ) -> Option<Box<dyn Editor>> {
     create_vizia_editor(editor_state, ViziaTheming::Custom, move |cx, _| {
         debug!("Creating view...");
@@ -77,6 +88,7 @@ pub(crate) fn create(
             shaper: shaper.clone(),
             peak_max: peak_max.clone(),
             peak_min: peak_min.clone(),
+            shaper_input_data: shaper_input_data.clone(),
         }
         .build(cx);
 
