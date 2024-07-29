@@ -23,7 +23,7 @@ struct Data {
     shaper: Arc<Mutex<DisplayShaper>>,
     peak_max: Arc<AtomicF32>,
     peak_min: Arc<AtomicF32>,
-    shaper_input_data: Arc<Mutex<triple_buffer::Input<DspShaper>>>
+    shaper_input_data: Arc<Mutex<triple_buffer::Input<DspShaper>>>,
 }
 
 enum EditorEvent {
@@ -36,7 +36,7 @@ impl Model for Data {
         event.map(
             |event: &EditorEvent, _| match event {
                 EditorEvent::Generate => {
-                    let text_file = File::open(r"C:\Users\Finn\Development\Audio\Projects\mathshaper\ressources\text_input.txt").unwrap();
+                    let text_file = File::open(std::env!("TEXT_INPUT_PATH")).unwrap();
                     let mut reader = BufReader::new(text_file);
                     let mut prompt = String::new();
                     reader.read_to_string(&mut prompt).unwrap();
