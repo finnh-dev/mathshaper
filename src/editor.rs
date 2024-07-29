@@ -36,7 +36,7 @@ impl Model for Data {
         event.map(
             |event: &EditorEvent, _| match event {
                 EditorEvent::Generate => {
-                    let text_file = File::open(std::env!("TEXT_INPUT_PATH")).unwrap();
+                    let text_file = File::open(r"B:\Portfolio\Content\Development\AudioDev\mathshaper\ressources\text_input.txt").unwrap();
                     let mut reader = BufReader::new(text_file);
                     let mut prompt = String::new();
                     reader.read_to_string(&mut prompt).unwrap();
