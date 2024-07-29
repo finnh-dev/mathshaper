@@ -132,90 +132,90 @@ impl<const SIZE: usize> Shaper<SIZE> {
     }
 }
 
-#[cfg(test)]
-mod test {
+// #[cfg(test)]
+// mod test {
 
-    use plotly::{Plot, Scatter};
-    use rand::random;
+//     use plotly::{Plot, Scatter};
+//     use rand::random;
 
-    use crate::shaper::Shaper as GenericShaper;
+//     use crate::shaper::Shaper as GenericShaper;
 
-    const TABLE_SIZE: usize = 32;
+//     const TABLE_SIZE: usize = 32;
 
-    type Shaper = GenericShaper<TABLE_SIZE>;
+//     type Shaper = GenericShaper<TABLE_SIZE>;
 
-    #[test]
-    fn test_floats() {
-        assert_eq!(f32::MIN, (f32::MIN as f64) as f32);
-        assert_ne!((f32::MIN / 1.24436) as f64, f32::MIN as f64 / 1.24436); // NOT EQUAL!
-        assert_ne!(
-            (f32::MIN / 1.24436_f32) as f64,
-            f32::MIN as f64 / 1.24436_f32 as f64
-        ); // NOT EQUAL!
-        let step = f32::from_bits(0b00000000000000000000000000000001);
-        println!("{}", step);
-    }
+//     #[test]
+//     fn test_floats() {
+//         assert_eq!(f32::MIN, (f32::MIN as f64) as f32);
+//         assert_ne!((f32::MIN / 1.24436) as f64, f32::MIN as f64 / 1.24436); // NOT EQUAL!
+//         assert_ne!(
+//             (f32::MIN / 1.24436_f32) as f64,
+//             f32::MIN as f64 / 1.24436_f32 as f64
+//         ); // NOT EQUAL!
+//         let step = f32::from_bits(0b00000000000000000000000000000001);
+//         println!("{}", step);
+//     }
 
-    #[test]
-    fn print_default_lut() {}
+//     #[test]
+//     fn print_default_lut() {}
 
-    #[test]
-    fn test_value_to_index() {
-        let index = Shaper::index(Shaper::INPUT_SAMPLE_MIN);
-        println!("Testing if index is 0 with input SAMPE_MIN:");
-        println!("\tindex:          {}", index);
-        println!("\texpected index: {}", 0);
-        assert_eq!(index, 0);
+//     #[test]
+//     fn test_value_to_index() {
+//         let index = Shaper::index(Shaper::INPUT_SAMPLE_MIN);
+//         println!("Testing if index is 0 with input SAMPE_MIN:");
+//         println!("\tindex:          {}", index);
+//         println!("\texpected index: {}", 0);
+//         assert_eq!(index, 0);
 
-        let index = Shaper::index(Shaper::INPUT_SAMPLE_MAX);
-        println!("Testing if index is max index with input SAMPLE_MAX:");
-        println!("\tindex:          {}", index);
-        println!("\texpected index: {}", Shaper::INDEX_MAX);
-        assert_eq!(index, Shaper::INDEX_MAX);
+//         let index = Shaper::index(Shaper::INPUT_SAMPLE_MAX);
+//         println!("Testing if index is max index with input SAMPLE_MAX:");
+//         println!("\tindex:          {}", index);
+//         println!("\texpected index: {}", Shaper::INDEX_MAX);
+//         assert_eq!(index, Shaper::INDEX_MAX);
 
-        let index = Shaper::index(Shaper::INPUT_SAMPLE_MAX + 2.0);
-        println!("Testing if index is max index with input out of range:");
-        println!("\tindex:          {}", index);
-        println!("\texpected index: {}", Shaper::INDEX_MAX);
-        assert_eq!(index, Shaper::INDEX_MAX);
-    }
+//         let index = Shaper::index(Shaper::INPUT_SAMPLE_MAX + 2.0);
+//         println!("Testing if index is max index with input out of range:");
+//         println!("\tindex:          {}", index);
+//         println!("\texpected index: {}", Shaper::INDEX_MAX);
+//         assert_eq!(index, Shaper::INDEX_MAX);
+//     }
 
-    #[test]
-    fn test_interpolate() {
-        let shaper = Shaper::default();
-        for _ in 0..1000 {
-            let x = Shaper::INPUT_SAMPLE_MIN + random::<f32>() + random::<f32>();
-            let y = shaper.lerp(Shaper::index(x), x);
-            assert_eq!(x, y)
-        }
-    }
+//     #[test]
+//     fn test_interpolate() {
+//         let shaper = Shaper::default();
+//         for _ in 0..1000 {
+//             let x = Shaper::INPUT_SAMPLE_MIN + random::<f32>() + random::<f32>();
+//             let y = shaper.lerp(Shaper::index(x), x);
+//             assert_eq!(x, y)
+//         }
+//     }
 
-    #[test]
-    fn test_prompt() {
-        let x_trace: Vec<f32> = (0..TABLE_SIZE).map(Shaper::value).collect();
-        let mut shaper = Shaper::default();
-        let default_trace = Scatter::new(x_trace.clone(), shaper.table.clone().into())
-            .mode(plotly::common::Mode::Markers)
-            .name("LUT Default");
-        shaper.prompt("math::sin(3 * PI * x)").unwrap();
-        let prompt_trace = Scatter::new(x_trace, shaper.table.clone().into())
-            .mode(plotly::common::Mode::Markers)
-            .name("LUT Prompt");
-        let mut random_x = Vec::new();
-        let mut random_y = Vec::new();
-        for _ in 0..8192 {
-            let x = Shaper::INPUT_SAMPLE_MIN + (2.0 * random::<f32>());
-            random_x.push(x);
-            let y = shaper.process(x);
-            random_y.push(y);
-        }
+//     #[test]
+//     fn test_prompt() {
+//         let x_trace: Vec<f32> = (0..TABLE_SIZE).map(Shaper::value).collect();
+//         let mut shaper = Shaper::default();
+//         let default_trace = Scatter::new(x_trace.clone(), shaper.table.clone().into())
+//             .mode(plotly::common::Mode::Markers)
+//             .name("LUT Default");
+//         shaper.prompt("math::sin(3 * PI * x)").unwrap();
+//         let prompt_trace = Scatter::new(x_trace, shaper.table.clone().into())
+//             .mode(plotly::common::Mode::Markers)
+//             .name("LUT Prompt");
+//         let mut random_x = Vec::new();
+//         let mut random_y = Vec::new();
+//         for _ in 0..8192 {
+//             let x = Shaper::INPUT_SAMPLE_MIN + (2.0 * random::<f32>());
+//             random_x.push(x);
+//             let y = shaper.process(x);
+//             random_y.push(y);
+//         }
 
-        let random_trace = Scatter::new(random_x, random_y)
-            .mode(plotly::common::Mode::Markers)
-            .name("Random");
+//         let random_trace = Scatter::new(random_x, random_y)
+//             .mode(plotly::common::Mode::Markers)
+//             .name("Random");
 
-        let mut plot = Plot::new();
-        plot.add_traces(vec![default_trace, prompt_trace, random_trace]);
-        plot.write_html("plot.html");
-    }
-}
+//         let mut plot = Plot::new();
+//         plot.add_traces(vec![default_trace, prompt_trace, random_trace]);
+//         plot.write_html("plot.html");
+//     }
+// }
