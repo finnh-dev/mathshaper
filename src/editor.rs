@@ -28,6 +28,7 @@ struct Data {
 
 enum EditorEvent {
     Generate,
+    Normalize,
 }
 
 impl Model for Data {
@@ -43,6 +44,10 @@ impl Model for Data {
                     let mut lock = self.shaper.lock().unwrap(); // TODO: Error Handling Poison Error
                     lock.prompt(&prompt).unwrap(); // TODO: Error Handling Prompt Error
                 }
+                EditorEvent::Normalize => {
+                    let mut lock = self.shaper.lock().unwrap(); // TODO: Error Handling Poison Error
+                    lock.normalize();
+                },
             },
         )
     }
@@ -80,10 +85,15 @@ pub(crate) fn create(
                 Label::new(cx, "PRE");
                 Button::new(
                     cx,
-                    move |cx| {
+                    |cx| {
                         cx.emit(EditorEvent::Generate);
                     },
                     |cx| Label::new(cx, "Reload"),
+                );
+                Button::new(
+                    cx,
+                    |cx| cx.emit(EditorEvent::Normalize),
+                    |cx| Label::new(cx, "Normalize"),
                 );
             })
             .class("side-container");
