@@ -24,7 +24,7 @@ nih_plug_vizia = { git = "https://github.com/robbert-vdh/nih-plug.git" }
 evalexpr = "11.3.0"
 rand = "0.8.5"
 triple_buffer = "8.0.0"
-valib = { git = "https://github.com/SolarLiner/valib.git", branch = "support/ts404" }
+valib = { git = "https://github.com/SolarLiner/valib.git" }
 
 [profile.release]
 lto = "thin"
