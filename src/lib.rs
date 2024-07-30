@@ -6,6 +6,7 @@ use core::f32;
 use nih_plug::prelude::*;
 use nih_plug_vizia::ViziaState;
 use shaper::Shaper as GenericShaper;
+use valib::oversample::Oversample;
 use std::sync::{Arc, Mutex};
 use triple_buffer::TripleBuffer;
 // This is a shortened version of the gain example with most comments removed, check out
@@ -14,12 +15,16 @@ use triple_buffer::TripleBuffer;
 
 type Shaper = GenericShaper<512>; // TODO: Figure out size
 
+const MAX_BLOCK_SIZE: usize = 512;
+const OVERSAMPLE_MAX: usize = 16;
+
 pub struct Mathshaper {
     params: Arc<MathshaperParams>,
     peak_max: Arc<AtomicF32>,
     peak_min: Arc<AtomicF32>,
     shaper_input_data: Arc<Mutex<triple_buffer::Input<Shaper>>>,
     shaper_output_data: triple_buffer::Output<Shaper>,
+    resampler: Oversample<f32>,
 }
 
 #[derive(Params)]
@@ -47,6 +52,7 @@ impl Default for Mathshaper {
             peak_min: Arc::default(),
             shaper_input_data: Arc::new(Mutex::new(shaper_in)),
             shaper_output_data: shaper_out,
+            resampler: Oversample::new(OVERSAMPLE_MAX, MAX_BLOCK_SIZE),
         }
     }
 }
@@ -177,43 +183,67 @@ impl Plugin for Mathshaper {
         _aux: &mut AuxiliaryBuffers,
         _context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-        for channel_samples in buffer.iter_samples() {
-            // Smoothing is optionally built into the parameters themselves
-            let pre_gain = self.params.pre_gain.smoothed.next();
-            let post_gain = self.params.post_gain.smoothed.next();
 
-            let mut new_peak_max = f32::MIN;
-            let mut new_peak_min = f32::MAX;
+        let pre_gain = self.params.pre_gain.smoothed.next();
+        let post_gain = self.params.post_gain.smoothed.next();
 
-            let shaper_data = self.shaper_output_data.read();
+        let mut new_peak_max = f32::MIN;
+        let mut new_peak_min = f32::MAX;
 
-            for sample in channel_samples {
-                *sample = *sample * pre_gain;
-                new_peak_max = new_peak_max.max(*sample);
-                new_peak_min = new_peak_min.min(*sample);
-                *sample = shaper_data.process(*sample) * post_gain;
+        let shaper_data = self.shaper_output_data.read();
+
+        for (_, block) in buffer.iter_blocks(MAX_BLOCK_SIZE) {
+            for io_buffer in block {
+
+                let mut oversampled_block = self.resampler.oversample(io_buffer);
+
+                for sample in oversampled_block.iter_mut() {
+                    *sample = *sample * pre_gain;
+                    new_peak_max = new_peak_max.max(*sample);
+                    new_peak_min = new_peak_min.min(*sample);
+                    *sample = shaper_data.process(*sample) * post_gain;
+                }
+
+                oversampled_block.finish(io_buffer);
             }
-
-            let old_peak_max = self.peak_max.load(std::sync::atomic::Ordering::Relaxed);
-            let old_peak_min = self.peak_min.load(std::sync::atomic::Ordering::Relaxed);
-            let decay = self.params.decay.value() / 100000.0; // TODO: Improve decay
-
-            let peak_max = if new_peak_max > old_peak_max {
-                new_peak_max
-            } else {
-                old_peak_max * (1.0 - decay)
-            };
-            let peak_min = if new_peak_min < old_peak_min {
-                new_peak_min
-            } else {
-                old_peak_min * (1.0 - decay)
-            };
-
-            self.peak_max
-                .store(peak_max, std::sync::atomic::Ordering::Relaxed);
-            self.peak_min
-                .store(peak_min, std::sync::atomic::Ordering::Relaxed);
         }
+
+        let old_peak_max = self.peak_max.load(std::sync::atomic::Ordering::Relaxed);
+        let old_peak_min = self.peak_min.load(std::sync::atomic::Ordering::Relaxed);
+        let decay = self.params.decay.value() / 100.0; // TODO: Improve decay
+
+        let peak_max = if new_peak_max > old_peak_max {
+            new_peak_max
+        } else {
+            old_peak_max * (1.0 - decay)
+        };
+        let peak_min = if new_peak_min < old_peak_min {
+            new_peak_min
+        } else {
+            old_peak_min * (1.0 - decay)
+        };
+
+        self.peak_max
+         .store(peak_max, std::sync::atomic::Ordering::Relaxed);
+        self.peak_min
+            .store(peak_min, std::sync::atomic::Ordering::Relaxed);
+
+        // for channel_samples in buffer.iter_samples() {
+        //     // Smoothing is optionally built into the parameters themselves
+
+
+        //     // let oversampled = self.resampler.oversample(channel_samples.)
+
+        //     for sample in channel_samples {
+        //         *sample = *sample * pre_gain;
+        //         new_peak_max = new_peak_max.max(*sample);
+        //         new_peak_min = new_peak_min.min(*sample);
+        //         *sample = shaper_data.process(*sample) * post_gain;
+        //     }
+
+            
+
+        // }
 
         ProcessStatus::Normal
     }
