@@ -6,7 +6,7 @@ use nih_plug_vizia::{create_vizia_editor, ViziaState, ViziaTheming};
 use shaper_view::ShaperView;
 use std::fs::File;
 use std::io::{BufReader, Read};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use crate::MathshaperParams;
 
@@ -35,12 +35,14 @@ impl Model for Data {
     fn event(&mut self, _cx: &mut EventContext, event: &mut Event) {
         event.map(|event: &EditorEvent, _| match event {
             EditorEvent::Generate => {
-                // let text_file = File::open(r"C:\Users\Finn\Development\Audio\Projects\mathshaper\ressources\text_input.txt").unwrap();
-                let text_file = File::open(r"B:\Portfolio\Content\Development\AudioDev\mathshaper\ressources\text_input.txt").unwrap();
+                let text_file = File::open(
+                    std::env::var("TEXT_INPUT_PATH").expect("Missing text input location"),
+                )
+                .unwrap();
                 let mut reader = BufReader::new(text_file);
                 let mut prompt = String::new();
                 reader.read_to_string(&mut prompt).unwrap();
-                
+
                 println!("Prompt: {prompt}");
 
                 let mut lock = self.shaper.lock().unwrap(); // TODO: Error Handling Poison Error
@@ -69,6 +71,8 @@ pub(crate) fn default_state() -> Arc<ViziaState> {
     ViziaState::new(|| (900, 450))
 }
 
+static DOTENV: OnceLock<Option<()>> = OnceLock::new();
+
 pub(crate) fn create(
     params: Arc<MathshaperParams>,
     editor_state: Arc<ViziaState>,
@@ -77,6 +81,24 @@ pub(crate) fn create(
     shaper_input_data: Arc<Mutex<triple_buffer::Input<DspShaper>>>,
 ) -> Option<Box<dyn Editor>> {
     create_vizia_editor(editor_state, ViziaTheming::Custom, move |cx, _| {
+        
+        match DOTENV.get_or_init(|| -> Option<()> {
+            if let Err(e) = dotenvy::dotenv() {
+                println!("Err: {}", e);
+            } else {
+                println!("dotenv successfully loaded")
+            }
+            return Some(());
+        }) {
+            Some(_) => println!("OnceCell called"),
+            None => println!("OnceCell not called"),
+        }
+
+        match std::env::var("TEXT_INPUT_PATH") {
+            Ok(val) => println!("Environment variable is set: {}", val),
+            Err(e) => println!("Couldn't read environment variable: {}", e),
+        }
+
         debug!("Creating view...");
         // assets::register_noto_sans_light(cx);
         // assets::register_noto_sans_thin(cx);

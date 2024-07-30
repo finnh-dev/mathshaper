@@ -18,6 +18,7 @@ type Shaper = GenericShaper<512>; // TODO: Figure out size
 const MAX_BLOCK_SIZE: usize = 512;
 const OVERSAMPLE_MAX: usize = 16;
 
+
 pub struct Mathshaper {
     params: Arc<MathshaperParams>,
     peak_max: Arc<AtomicF32>,
@@ -45,6 +46,8 @@ struct MathshaperParams {
 
 impl Default for Mathshaper {
     fn default() -> Self {
+        
+
         let (shaper_in, shaper_out) = TripleBuffer::default().split();
         Self {
             params: Arc::new(MathshaperParams::default()),
@@ -171,7 +174,8 @@ impl Plugin for Mathshaper {
             .main_input_channels
             .unwrap_or(unsafe { NonZeroU32::new_unchecked(1) })
             .get() as usize;
-        let resamplers = vec![Oversample::<f32>::new(OVERSAMPLE_MAX, MAX_BLOCK_SIZE); input_channels];
+        let resamplers =
+            vec![Oversample::<f32>::new(OVERSAMPLE_MAX, MAX_BLOCK_SIZE); input_channels];
         self.resamplers = resamplers.into_boxed_slice();
         // Resize buffers and perform other potentially expensive initialization operations here.
         // The `reset()` function is always called right after this function. You can remove this
@@ -216,12 +220,11 @@ impl Plugin for Mathshaper {
 
         for (_, block) in buffer.iter_blocks(MAX_BLOCK_SIZE) {
             for (channel, io_buffer) in block.into_iter().enumerate() {
-
                 if channel >= self.resamplers.len() {
                     nih_log!("Channel index out of bounds");
                     break;
                 }
-            
+
                 let mut oversampled_block = self.resamplers[channel].oversample(io_buffer);
 
                 for sample in oversampled_block.iter_mut() {
