@@ -6,9 +6,9 @@ use core::f32;
 use nih_plug::prelude::*;
 use nih_plug_vizia::ViziaState;
 use shaper::Shaper as GenericShaper;
-use valib::oversample::Oversample;
 use std::sync::{Arc, Mutex};
 use triple_buffer::TripleBuffer;
+use valib::oversample::Oversample;
 // This is a shortened version of the gain example with most comments removed, check out
 // https://github.com/robbert-vdh/nih-plug/blob/master/plugins/examples/gain/src/lib.rs to get
 // started
@@ -24,7 +24,7 @@ pub struct Mathshaper {
     peak_min: Arc<AtomicF32>,
     shaper_input_data: Arc<Mutex<triple_buffer::Input<Shaper>>>,
     shaper_output_data: triple_buffer::Output<Shaper>,
-    resampler: Oversample<f32>,
+    resamplers: Box<[Oversample<f32>]>,
 }
 
 #[derive(Params)]
@@ -52,7 +52,7 @@ impl Default for Mathshaper {
             peak_min: Arc::default(),
             shaper_input_data: Arc::new(Mutex::new(shaper_in)),
             shaper_output_data: shaper_out,
-            resampler: Oversample::new(OVERSAMPLE_MAX, MAX_BLOCK_SIZE),
+            resamplers: vec![].into_boxed_slice(),
         }
     }
 }
@@ -162,10 +162,17 @@ impl Plugin for Mathshaper {
 
     fn initialize(
         &mut self,
-        _audio_io_layout: &AudioIOLayout,
+        audio_io_layout: &AudioIOLayout,
         _buffer_config: &BufferConfig,
         _context: &mut impl InitContext<Self>,
     ) -> bool {
+        println!("input channels: {:?}", audio_io_layout.main_output_channels);
+        let input_channels = audio_io_layout
+            .main_input_channels
+            .unwrap_or(unsafe { NonZeroU32::new_unchecked(1) })
+            .get() as usize;
+        let resamplers = vec![Oversample::<f32>::new(OVERSAMPLE_MAX, MAX_BLOCK_SIZE); input_channels];
+        self.resamplers = resamplers.into_boxed_slice();
         // Resize buffers and perform other potentially expensive initialization operations here.
         // The `reset()` function is always called right after this function. You can remove this
         // function if you do not need it.
@@ -183,7 +190,6 @@ impl Plugin for Mathshaper {
         _aux: &mut AuxiliaryBuffers,
         _context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-
         let pre_gain = self.params.pre_gain.smoothed.next();
         let post_gain = self.params.post_gain.smoothed.next();
 
@@ -192,10 +198,31 @@ impl Plugin for Mathshaper {
 
         let shaper_data = self.shaper_output_data.read();
 
-        for (_, block) in buffer.iter_blocks(MAX_BLOCK_SIZE) {
-            for io_buffer in block {
+        // for (_, mut block) in buffer.iter_blocks(MAX_BLOCK_SIZE) {
+        //     for channel in 0..block.channels() {
+        //         let io_buffer = block.get_mut(channel).expect("Channel index out of bounds");
+        //         let mut oversampled_block = self.resamplers[channel].oversample(io_buffer);
 
-                let mut oversampled_block = self.resampler.oversample(io_buffer);
+        //         for sample in oversampled_block.iter_mut() {
+        //             *sample = *sample * pre_gain;
+        //             new_peak_max = new_peak_max.max(*sample);
+        //             new_peak_min = new_peak_min.min(*sample);
+        //             *sample = shaper_data.process(*sample) * post_gain;
+        //         }
+
+        //         oversampled_block.finish(io_buffer);
+        //     }
+        // }
+
+        for (_, block) in buffer.iter_blocks(MAX_BLOCK_SIZE) {
+            for (channel, io_buffer) in block.into_iter().enumerate() {
+
+                if channel >= self.resamplers.len() {
+                    nih_log!("Channel index out of bounds");
+                    break;
+                }
+            
+                let mut oversampled_block = self.resamplers[channel].oversample(io_buffer);
 
                 for sample in oversampled_block.iter_mut() {
                     *sample = *sample * pre_gain;
@@ -224,13 +251,12 @@ impl Plugin for Mathshaper {
         };
 
         self.peak_max
-         .store(peak_max, std::sync::atomic::Ordering::Relaxed);
+            .store(peak_max, std::sync::atomic::Ordering::Relaxed);
         self.peak_min
             .store(peak_min, std::sync::atomic::Ordering::Relaxed);
 
         // for channel_samples in buffer.iter_samples() {
         //     // Smoothing is optionally built into the parameters themselves
-
 
         //     // let oversampled = self.resampler.oversample(channel_samples.)
 
@@ -240,8 +266,6 @@ impl Plugin for Mathshaper {
         //         new_peak_min = new_peak_min.min(*sample);
         //         *sample = shaper_data.process(*sample) * post_gain;
         //     }
-
-            
 
         // }
 
