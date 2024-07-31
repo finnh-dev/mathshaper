@@ -35,12 +35,11 @@ impl Model for Data {
     fn event(&mut self, _cx: &mut EventContext, event: &mut Event) {
         event.map(|event: &EditorEvent, _| match event {
             EditorEvent::Generate => {
-                // let text_file = File::open(r"C:\Users\Finn\Development\Audio\Projects\mathshaper\ressources\text_input.txt").unwrap();
-                let text_file = File::open(r"B:\Portfolio\Content\Development\AudioDev\mathshaper\ressources\text_input.txt").unwrap();
+                let text_file = File::open(std::env!("TEXT_INPUT_PATH")).unwrap();
                 let mut reader = BufReader::new(text_file);
                 let mut prompt = String::new();
                 reader.read_to_string(&mut prompt).unwrap();
-                
+
                 println!("Prompt: {prompt}");
 
                 let mut lock = self.shaper.lock().unwrap(); // TODO: Error Handling Poison Error
