@@ -18,7 +18,6 @@ type Shaper = GenericShaper<512>; // TODO: Figure out size
 const MAX_BLOCK_SIZE: usize = 512;
 const OVERSAMPLE_MAX: usize = 16;
 
-
 pub struct Mathshaper {
     params: Arc<MathshaperParams>,
     peak_max: Arc<AtomicF32>,
@@ -46,8 +45,6 @@ struct MathshaperParams {
 
 impl Default for Mathshaper {
     fn default() -> Self {
-        
-
         let (shaper_in, shaper_out) = TripleBuffer::default().split();
         Self {
             params: Arc::new(MathshaperParams::default()),
