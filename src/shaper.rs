@@ -38,11 +38,17 @@ impl<const SIZE: usize> Shaper<SIZE> {
             "PI" => evalexpr::Value::Float(std::f64::consts::PI),
             "Cheb" => Function::new(|args| {
                 let args = args.as_tuple()?;
-                if let (Value::Float(x), Value::Int(n)) = (&args[0], &args[1]) {
-                    Ok(Value::Float(chebychev(x, n)?))
-                } else {
-                    Err(EvalexprError::expected_number(args[0].clone())) // TODO: improve error reporting
+                if args.len() != 2 {
+                    return Err(EvalexprError::expected_fixed_len_tuple(2, Value::Int(args.len() as i64)));
                 }
+                let Value::Float(x) = &args[0] else {
+                    return Err(EvalexprError::expected_float(args[0].clone()));
+                };
+                let Value::Int(n) = &args[1] else {
+                    return Err(EvalexprError::expected_int(args[1].clone()));
+                };
+
+                Ok(Value::Float(chebychev(x, n)?))
             }),
         }
         .expect("Failed to initialize contex map!")
@@ -55,33 +61,30 @@ impl<const SIZE: usize> Shaper<SIZE> {
         Ok(this)
     }
 
-    #[allow(unused)] // TODO: remove
     pub fn process(&self, x: f32) -> f32 {
-        self.lerp(Self::index(x), x)
-    }
-
-    fn index(value: f32) -> usize {
-        (((value - Self::INPUT_SAMPLE_MIN) / Self::STEP) as usize).min(Self::INDEX_MAX)
+        self.get_interpolated(x)
     }
 
     pub fn value(index: usize) -> f32 {
         Self::INPUT_SAMPLE_MIN + (index as f32 * Self::STEP)
     }
 
-    fn lerp(&self, index: usize, x: f32) -> f32 {
-        if index == Self::INDEX_MAX {
+    fn get_interpolated(&self, x: f32) -> f32 {
+        if x >= 1.0 {
             return self.table[Self::INDEX_MAX];
-        };
-        let higher_index = index + 1;
-        let y1 = self.table[index];
-        let x1 = Self::value(index);
-        let y2 = self.table[higher_index];
-        let x2 = Self::value(higher_index);
+        }
+        if x <= 1.0 {
+            return self.table[0];
+        }
 
-        let delta_y = y1 - y2;
-        let delta_x = x1 - x2;
-        let position = (x - x1) / delta_x;
-        y1 + (delta_y * position)
+        let true_index = (x + 1.0) * 0.5 * Self::INDEX_MAX as f32;
+        let index = true_index.floor();
+        let lerp_factor = true_index - index;
+        let index = index as usize;
+        let value_1 = self.table[index];
+        let value_2 = self.table[index + 1];
+
+        value_1 + lerp_factor * (value_2 - value_1)
     }
 
     pub fn normalize(&mut self) {

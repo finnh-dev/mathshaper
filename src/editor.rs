@@ -24,6 +24,7 @@ struct Data {
     peak_max: Arc<AtomicF32>,
     peak_min: Arc<AtomicF32>,
     shaper_input_data: Arc<Mutex<triple_buffer::Input<DspShaper>>>,
+    last_error: String,
 }
 
 enum EditorEvent {
@@ -43,12 +44,18 @@ impl Model for Data {
                 println!("Prompt: {prompt}");
 
                 let mut lock = self.shaper.lock().unwrap(); // TODO: Error Handling Poison Error
-                lock.prompt(&prompt).unwrap(); // TODO: Error Handling Prompt Error
+                if let Err(e) = lock.prompt(&prompt) {
+                    self.last_error = format!("Error:\n{}", e.to_string());
+                    return;
+                };
+                self.last_error = String::new();
 
-                let mut lock = self.shaper_input_data.lock().unwrap();
+                let mut lock = self.shaper_input_data.lock().unwrap(); // TODO: Error Handling Poison Error
                 let shaper_input = lock.input_buffer();
-                shaper_input.prompt(&prompt).unwrap(); // TODO: Error Handling Prompt Error
+                shaper_input.prompt(&prompt).expect("Promt error should be caaught by UI shaper");
                 lock.publish();
+
+                self.last_error.clear();
             }
             EditorEvent::Normalize => {
                 let mut lock = self.shaper.lock().unwrap(); // TODO: Error Handling Poison Error
@@ -89,24 +96,32 @@ pub(crate) fn create(
             peak_max: peak_max.clone(),
             peak_min: peak_min.clone(),
             shaper_input_data: shaper_input_data.clone(),
+            last_error: String::new(),
         }
         .build(cx);
 
         HStack::new(cx, move |cx| {
             VStack::new(cx, move |cx| {
-                Label::new(cx, "PRE");
+                Label::new(cx, "PRE")
+                .width(Stretch(1.0));
                 Button::new(
                     cx,
                     |cx| {
                         cx.emit(EditorEvent::Generate);
                     },
                     |cx| Label::new(cx, "Reload"),
-                );
+                )
+                .width(Stretch(1.0));
                 Button::new(
                     cx,
                     |cx| cx.emit(EditorEvent::Normalize),
                     |cx| Label::new(cx, "Normalize"),
-                );
+                )
+                .width(Stretch(1.0));
+                Label::new(cx, Data::last_error)
+                .width(Stretch(1.0))
+                .height(Stretch(4.0))
+                .text_wrap(true);
             })
             .class("side-container");
 
