@@ -1,3 +1,4 @@
+use anita::compile_expression;
 use nih_plug::log::debug;
 use nih_plug::prelude::{AtomicF32, Editor};
 use nih_plug_vizia::vizia::prelude::*;
@@ -8,28 +9,22 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use std::sync::{Arc, Mutex};
 
-use crate::MathshaperParams;
-
-use crate::shaper::Shaper as GenericShaper;
-const TABLE_SIZE: usize = 512;
-type DisplayShaper = GenericShaper<TABLE_SIZE>;
-use crate::Shaper as DspShaper;
+use crate::{MathshaperParams, TSCompiledFunction};
 
 mod shaper_view;
 
 #[derive(Lens)]
 struct Data {
     _params: Arc<MathshaperParams>,
-    shaper: Arc<Mutex<DisplayShaper>>,
+    shaper: Arc<Mutex<Arc<TSCompiledFunction>>>,
     peak_max: Arc<AtomicF32>,
     peak_min: Arc<AtomicF32>,
-    shaper_input_data: Arc<Mutex<triple_buffer::Input<DspShaper>>>,
+    shaper_input_data: Arc<Mutex<triple_buffer::Input<Arc<TSCompiledFunction>>>>,
     last_error: String,
 }
 
 enum EditorEvent {
     Generate,
-    Normalize,
 }
 
 impl Model for Data {
@@ -43,28 +38,25 @@ impl Model for Data {
 
                 println!("Prompt: {prompt}");
 
-                let mut lock = self.shaper.lock().unwrap(); // TODO: Error Handling Poison Error
-                if let Err(e) = lock.prompt(&prompt) {
-                    self.last_error = format!("Error:\n{}", e.to_string());
-                    return;
+                let func = match compile_expression!(&prompt, (x) -> f32) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        self.last_error = format!("Error:\n{:#?}", e);
+                        return;
+                    },
                 };
-                self.last_error = String::new();
+
+                let ts_func = Arc::new(TSCompiledFunction::new(func));
+
+                let mut lock = self.shaper.lock().expect("Poisoned Mutex");
+                *lock = ts_func.clone();
 
                 let mut lock = self.shaper_input_data.lock().unwrap(); // TODO: Error Handling Poison Error
                 let shaper_input = lock.input_buffer();
-                shaper_input.prompt(&prompt).expect("Promt error should be caaught by UI shaper");
+                *shaper_input = ts_func.clone();
                 lock.publish();
 
                 self.last_error.clear();
-            }
-            EditorEvent::Normalize => {
-                let mut lock = self.shaper.lock().unwrap(); // TODO: Error Handling Poison Error
-                lock.normalize();
-
-                let mut lock = self.shaper_input_data.lock().unwrap(); // TODO: Error Handling Poison Error
-                let shaper_input = lock.input_buffer();
-                shaper_input.normalize();
-                lock.publish();
             }
         })
     }
@@ -80,7 +72,7 @@ pub(crate) fn create(
     editor_state: Arc<ViziaState>,
     peak_max: Arc<AtomicF32>,
     peak_min: Arc<AtomicF32>,
-    shaper_input_data: Arc<Mutex<triple_buffer::Input<DspShaper>>>,
+    shaper_input_data: Arc<Mutex<triple_buffer::Input<Arc<TSCompiledFunction>>>>,
 ) -> Option<Box<dyn Editor>> {
     create_vizia_editor(editor_state, ViziaTheming::Custom, move |cx, _| {
         debug!("Creating view...");
@@ -89,7 +81,8 @@ pub(crate) fn create(
         cx.add_stylesheet(include_style!("src/style.css"))
             .expect("Failed to load stylesheet");
 
-        let shaper = Arc::new(Mutex::default());
+        let func = TSCompiledFunction::new(compile_expression!("x", (x) -> f32).unwrap());
+        let shaper = Arc::new(Mutex::new(Arc::new(func)));
         Data {
             _params: params.clone(),
             shaper: shaper.clone(),
@@ -112,16 +105,6 @@ pub(crate) fn create(
                     |cx| Label::new(cx, "Reload"),
                 )
                 .width(Stretch(1.0));
-                Button::new(
-                    cx,
-                    |cx| cx.emit(EditorEvent::Normalize),
-                    |cx| Label::new(cx, "Normalize"),
-                )
-                .width(Stretch(1.0));
-                Label::new(cx, Data::last_error)
-                .width(Stretch(1.0))
-                .height(Stretch(4.0))
-                .text_wrap(true);
             })
             .class("side-container");
 

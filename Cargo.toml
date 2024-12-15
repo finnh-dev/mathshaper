@@ -24,9 +24,9 @@ nih_plug_vizia = { git = "https://github.com/robbert-vdh/nih-plug.git" }
 evalexpr = "11.3.0"
 rand = "0.8.5"
 triple_buffer = "8.0.0"
-valib = { git = "https://github.com/SolarLiner/valib.git", rev = "c1426b9f"}
+valib = { git = "https://github.com/SolarLiner/valib.git", rev = "c1426b9f" }
 dotenvy = "0.15.7"
-anita = { git = "https://github.com/finnh-dev/anita.git", rev = "a3364df"}
+anita = { git = "https://github.com/finnh-dev/anita.git" }
 
 [profile.release]
 lto = "thin"

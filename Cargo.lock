@@ -189,7 +189,7 @@ dependencies = [
 [[package]]
 name = "anita"
 version = "0.1.0"
-source = "git+https://github.com/finnh-dev/anita.git?rev=a3364df#a3364df302588d503821668e49e6bec24c806c3e"
+source = "git+https://github.com/finnh-dev/anita.git#aaf4f9ce9e99a67bafd9cc49a1fd960b9e6786cf"
 dependencies = [
  "cranelift",
  "cranelift-jit",
@@ -2069,7 +2069,7 @@ dependencies = [
 [[package]]
 name = "internal_macros"
 version = "0.1.0"
-source = "git+https://github.com/finnh-dev/anita.git?rev=a3364df#a3364df302588d503821668e49e6bec24c806c3e"
+source = "git+https://github.com/finnh-dev/anita.git#aaf4f9ce9e99a67bafd9cc49a1fd960b9e6786cf"
 dependencies = [
  "proc-macro-crate 3.2.0",
  "proc-macro2",

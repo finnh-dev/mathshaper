@@ -1,19 +1,17 @@
 mod editor;
 mod math;
-mod shaper;
 
 use core::f32;
+use anita::{compile_expression, jit::CompiledFunction};
 use nih_plug::prelude::*;
 use nih_plug_vizia::ViziaState;
-use shaper::Shaper as GenericShaper;
-use std::sync::{Arc, Mutex};
+use std::{ops::Deref, sync::{Arc, Mutex}};
 use triple_buffer::TripleBuffer;
 use valib::oversample::Oversample;
 // This is a shortened version of the gain example with most comments removed, check out
 // https://github.com/robbert-vdh/nih-plug/blob/master/plugins/examples/gain/src/lib.rs to get
 // started
 
-type Shaper = GenericShaper<512>; // TODO: Figure out size
 
 const MAX_BLOCK_SIZE: usize = 512;
 const OVERSAMPLE_MAX: usize = 16;
@@ -22,8 +20,8 @@ pub struct Mathshaper {
     params: Arc<MathshaperParams>,
     peak_max: Arc<AtomicF32>,
     peak_min: Arc<AtomicF32>,
-    shaper_input_data: Arc<Mutex<triple_buffer::Input<Shaper>>>,
-    shaper_output_data: triple_buffer::Output<Shaper>,
+    shaper_input_data: Arc<Mutex<triple_buffer::Input<Arc<TSCompiledFunction>>>>,
+    shaper_output_data: triple_buffer::Output<Arc<TSCompiledFunction>>,
     resamplers: Box<[Oversample<f32>]>,
 }
 
@@ -43,9 +41,32 @@ struct MathshaperParams {
     pub decay: FloatParam,
 }
 
+pub(crate) struct TSCompiledFunction {
+    inner: CompiledFunction<fn(f32) -> f32>,
+}
+
+impl TSCompiledFunction {
+    pub(crate) fn new(inner: CompiledFunction<fn(f32) -> f32>) -> Self {
+        Self {
+            inner
+        }
+    }
+}
+
+impl Deref for TSCompiledFunction {
+    type Target = CompiledFunction<fn(f32) -> f32>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+unsafe impl Sync for TSCompiledFunction {}
+
 impl Default for Mathshaper {
     fn default() -> Self {
-        let (shaper_in, shaper_out) = TripleBuffer::default().split();
+        let function = TSCompiledFunction::new(compile_expression!("x", (x) -> f32).expect("Default function should compile"));
+        let (shaper_in, shaper_out) = TripleBuffer::new(&Arc::new(function)).split();
         Self {
             params: Arc::new(MathshaperParams::default()),
             peak_max: Arc::default(),
@@ -212,7 +233,7 @@ impl Plugin for Mathshaper {
                     *sample = *sample * pre_gain;
                     new_peak_max = new_peak_max.max(*sample);
                     new_peak_min = new_peak_min.min(*sample);
-                    *sample = shaper_data.process(*sample) * post_gain;
+                    *sample = shaper_data(*sample) * post_gain;
                 }
 
                 oversampled_block.finish(io_buffer);
