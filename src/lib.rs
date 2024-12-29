@@ -2,10 +2,10 @@ mod editor;
 mod math;
 
 use core::f32;
-use anita::{compile_expression, jit::CompiledFunction};
+use anita::{compile_expression, jit::compiled_function::CompiledFunction};
 use nih_plug::prelude::*;
 use nih_plug_vizia::ViziaState;
-use std::{ops::Deref, sync::{Arc, Mutex}};
+use std::sync::{Arc, Mutex};
 use triple_buffer::TripleBuffer;
 use valib::oversample::Oversample;
 // This is a shortened version of the gain example with most comments removed, check out
@@ -20,8 +20,8 @@ pub struct Mathshaper {
     params: Arc<MathshaperParams>,
     peak_max: Arc<AtomicF32>,
     peak_min: Arc<AtomicF32>,
-    shaper_input_data: Arc<Mutex<triple_buffer::Input<Arc<TSCompiledFunction>>>>,
-    shaper_output_data: triple_buffer::Output<Arc<TSCompiledFunction>>,
+    shaper_input_data: Arc<Mutex<triple_buffer::Input<Arc<CompiledFunction<fn(f32) -> f32>>>>>,
+    shaper_output_data: triple_buffer::Output<Arc<CompiledFunction<fn(f32) -> f32>>>,
     resamplers: Box<[Oversample<f32>]>,
 }
 
@@ -41,31 +41,9 @@ struct MathshaperParams {
     pub decay: FloatParam,
 }
 
-pub(crate) struct TSCompiledFunction {
-    inner: CompiledFunction<fn(f32) -> f32>,
-}
-
-impl TSCompiledFunction {
-    pub(crate) fn new(inner: CompiledFunction<fn(f32) -> f32>) -> Self {
-        Self {
-            inner
-        }
-    }
-}
-
-impl Deref for TSCompiledFunction {
-    type Target = CompiledFunction<fn(f32) -> f32>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-unsafe impl Sync for TSCompiledFunction {}
-
 impl Default for Mathshaper {
     fn default() -> Self {
-        let function = TSCompiledFunction::new(compile_expression!("x", (x) -> f32).expect("Default function should compile"));
+        let function = compile_expression!("x", (x) -> f32).expect("Default function should compile");
         let (shaper_in, shaper_out) = TripleBuffer::new(&Arc::new(function)).split();
         Self {
             params: Arc::new(MathshaperParams::default()),
@@ -224,19 +202,19 @@ impl Plugin for Mathshaper {
                     break;
                 }
 
-                let mut oversampled_block = self.resamplers[channel].oversample(io_buffer);
+                // let mut oversampled_block = self.resamplers[channel].oversample(io_buffer);
 
                 let pre_gain = self.params.pre_gain.smoothed.next();
                 let post_gain = self.params.post_gain.smoothed.next();
 
-                for sample in oversampled_block.iter_mut() {
+                for sample in io_buffer.iter_mut() {
                     *sample = *sample * pre_gain;
                     new_peak_max = new_peak_max.max(*sample);
                     new_peak_min = new_peak_min.min(*sample);
                     *sample = shaper_data(*sample) * post_gain;
                 }
 
-                oversampled_block.finish(io_buffer);
+                // oversampled_block.finish(io_buffer);
             }
         }
 

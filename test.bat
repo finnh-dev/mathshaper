@@ -1,0 +1,1 @@
+cargo xtask bundle mathshaper --release && .\target\bundled\Mathshaper.exe
