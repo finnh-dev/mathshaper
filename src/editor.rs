@@ -82,7 +82,7 @@ pub(crate) fn create(
         cx.add_stylesheet(include_style!("src/style.css"))
             .expect("Failed to load stylesheet");
 
-        let func =compile_expression!("x", (x) -> f32).unwrap();
+        let func = compile_expression!("x", (x) -> f32).unwrap();
         let shaper = Arc::new(Mutex::new(Arc::new(func)));
         Data {
             _params: params.clone(),
@@ -106,6 +106,10 @@ pub(crate) fn create(
                     |cx| Label::new(cx, "Reload"),
                 )
                 .width(Stretch(1.0));
+                Label::new(cx, Data::last_error)
+                .width(Stretch(1.0))
+                .height(Stretch(4.0))
+                .text_wrap(true);
             })
             .class("side-container");
 
