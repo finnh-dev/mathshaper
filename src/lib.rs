@@ -1,8 +1,9 @@
 mod editor;
 mod math;
+mod shaper;
 
 use core::f32;
-use anita::{compile_expression, jit::compiled_function::CompiledFunction};
+use shaper::{compile_shaper, Shaper};
 use nih_plug::prelude::*;
 use nih_plug_vizia::ViziaState;
 use std::sync::{Arc, Mutex};
@@ -20,8 +21,8 @@ pub struct Mathshaper {
     params: Arc<MathshaperParams>,
     peak_max: Arc<AtomicF32>,
     peak_min: Arc<AtomicF32>,
-    shaper_input_data: Arc<Mutex<triple_buffer::Input<Arc<CompiledFunction<fn(f32) -> f32>>>>>,
-    shaper_output_data: triple_buffer::Output<Arc<CompiledFunction<fn(f32) -> f32>>>,
+    shaper_input_data: Arc<Mutex<triple_buffer::Input<Arc<Shaper>>>>,
+    shaper_output_data: triple_buffer::Output<Arc<Shaper>>,
     resamplers: Box<[Oversample<f32>]>,
 }
 
@@ -43,7 +44,7 @@ struct MathshaperParams {
 
 impl Default for Mathshaper {
     fn default() -> Self {
-        let function = compile_expression!("x", (x) -> f32).expect("Default function should compile");
+        let function = compile_shaper("x").expect("Default function should compile");
         let (shaper_in, shaper_out) = TripleBuffer::new(&Arc::new(function)).split();
         Self {
             params: Arc::new(MathshaperParams::default()),
@@ -211,7 +212,7 @@ impl Plugin for Mathshaper {
                     *sample = *sample * pre_gain;
                     new_peak_max = new_peak_max.max(*sample);
                     new_peak_min = new_peak_min.min(*sample);
-                    *sample = shaper_data(*sample) * post_gain;
+                    *sample = shaper_data(*sample, 1.0, 1.0, 1.0, 1.0) * post_gain; // TODO: add params
                 }
 
                 // oversampled_block.finish(io_buffer);

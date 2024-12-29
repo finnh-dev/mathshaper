@@ -1,5 +1,3 @@
-use anita::compile_expression;
-use anita::jit::compiled_function::CompiledFunction;
 use nih_plug::log::debug;
 use nih_plug::prelude::{AtomicF32, Editor};
 use nih_plug_vizia::vizia::prelude::*;
@@ -10,6 +8,7 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use std::sync::{Arc, Mutex};
 
+use crate::shaper::{compile_shaper, Shaper};
 use crate::MathshaperParams;
 
 mod shaper_view;
@@ -17,10 +16,10 @@ mod shaper_view;
 #[derive(Lens)]
 struct Data {
     _params: Arc<MathshaperParams>,
-    shaper: Arc<Mutex<Arc<CompiledFunction<fn(f32) -> f32>>>>,
+    shaper: Arc<Mutex<Arc<Shaper>>>,
     peak_max: Arc<AtomicF32>,
     peak_min: Arc<AtomicF32>,
-    shaper_input_data: Arc<Mutex<triple_buffer::Input<Arc<CompiledFunction<fn(f32) -> f32>>>>>,
+    shaper_input_data: Arc<Mutex<triple_buffer::Input<Arc<Shaper>>>>,
     last_error: String,
 }
 
@@ -39,7 +38,7 @@ impl Model for Data {
 
                 println!("Prompt: {prompt}");
 
-                let func = match compile_expression!(&prompt, (x) -> f32) {
+                let func = match compile_shaper(prompt) {
                     Ok(f) => f,
                     Err(e) => {
                         self.last_error = format!("Error:\n{:#?}", e);
@@ -73,7 +72,7 @@ pub(crate) fn create(
     editor_state: Arc<ViziaState>,
     peak_max: Arc<AtomicF32>,
     peak_min: Arc<AtomicF32>,
-    shaper_input_data: Arc<Mutex<triple_buffer::Input<Arc<CompiledFunction<fn(f32) -> f32>>>>>,
+    shaper_input_data: Arc<Mutex<triple_buffer::Input<Arc<Shaper>>>>,
 ) -> Option<Box<dyn Editor>> {
     create_vizia_editor(editor_state, ViziaTheming::Custom, move |cx, _| {
         debug!("Creating view...");
@@ -82,7 +81,7 @@ pub(crate) fn create(
         cx.add_stylesheet(include_style!("src/style.css"))
             .expect("Failed to load stylesheet");
 
-        let func = compile_expression!("x", (x) -> f32).unwrap();
+        let func = compile_shaper("x").expect("Failed to compile default");
         let shaper = Arc::new(Mutex::new(Arc::new(func)));
         Data {
             _params: params.clone(),

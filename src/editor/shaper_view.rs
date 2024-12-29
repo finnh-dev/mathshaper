@@ -1,14 +1,15 @@
 use std::sync::{atomic::Ordering, Arc, Mutex};
 
-use anita::jit::compiled_function::CompiledFunction; // breaks ui
 use nih_plug::prelude::AtomicF32;
 use nih_plug_vizia::vizia::{
     prelude::*,
     vg::{self, Color},
 };
 
+use super::Shaper;
+
 pub struct ShaperView {
-    shaper: Arc<Mutex<Arc<CompiledFunction<fn(f32) -> f32>>>>,
+    shaper: Arc<Mutex<Arc<Shaper>>>,
     peak_max: Arc<AtomicF32>,
     peak_min: Arc<AtomicF32>,
 }
@@ -21,7 +22,7 @@ impl ShaperView {
         peak_min: LPeakMin,
     ) -> Handle<Self>
     where
-        LShaper: Lens<Target = Arc<Mutex<Arc<CompiledFunction<fn(f32) -> f32>>>>>,
+        LShaper: Lens<Target = Arc<Mutex<Arc<Shaper>>>>,
         LPeakMax: Lens<Target = Arc<AtomicF32>>,
         LPeakMin: Lens<Target = Arc<AtomicF32>>,
     {
@@ -64,11 +65,11 @@ impl View for ShaperView {
             let mut plot = vg::Path::new();
             plot.move_to(
                 bounds.x,
-                bounds.y + (bounds.h / 2.0) - ((bounds.h / 2.0) * func(-1.0)),
+                bounds.y + (bounds.h / 2.0) - ((bounds.h / 2.0) * func(-1.0, 1.0, 1.0, 1.0, 1.0)), // TODO: add params
             );
 
             for i in 0..400 {
-                let y = func((i as f32 / 400.0) * 2.0 - 1.0);
+                let y = func((i as f32 / 400.0) * 2.0 - 1.0, 1.0, 1.0, 1.0, 1.0); // TODO: add params
                 plot.line_to(
                     bounds.x + (i as f32 * x_step),
                     bounds.y + (bounds.h / 2.0) - ((bounds.h / 2.0) * y),
