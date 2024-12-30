@@ -2,11 +2,12 @@ use nih_plug::log::debug;
 use nih_plug::prelude::{AtomicF32, Editor};
 use nih_plug_vizia::vizia::prelude::*;
 
+use nih_plug_vizia::widgets::ParamSlider;
 use nih_plug_vizia::{create_vizia_editor, ViziaState, ViziaTheming};
 use shaper_view::ShaperView;
 use std::fs::File;
 use std::io::{BufReader, Read};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use crate::shaper::{compile_shaper, Shaper};
 use crate::MathshaperParams;
@@ -15,12 +16,13 @@ mod shaper_view;
 
 #[derive(Lens)]
 struct Data {
-    _params: Arc<MathshaperParams>,
+    params: Arc<MathshaperParams>,
     shaper: Arc<Mutex<Arc<Shaper>>>,
     peak_max: Arc<AtomicF32>,
     peak_min: Arc<AtomicF32>,
     shaper_input_data: Arc<Mutex<triple_buffer::Input<Arc<Shaper>>>>,
     last_error: String,
+    expression: Arc<RwLock<String>>,
 }
 
 enum EditorEvent {
@@ -38,12 +40,16 @@ impl Model for Data {
 
                 println!("Prompt: {prompt}");
 
-                let func = match compile_shaper(prompt) {
-                    Ok(f) => f,
+                let func = match compile_shaper(prompt.clone()) {
+                    Ok(f) => {
+                        let mut lock = self.expression.write().expect("Poisond lock");
+                        *lock = prompt;
+                        f
+                    }
                     Err(e) => {
                         self.last_error = format!("Error:\n{:#?}", e);
                         return;
-                    },
+                    }
                 };
 
                 let ts_func = Arc::new(func);
@@ -64,7 +70,7 @@ impl Model for Data {
 
 // Makes sense to also define this here, makes it a bit easier to keep track of
 pub(crate) fn default_state() -> Arc<ViziaState> {
-    ViziaState::new(|| (900, 450))
+    ViziaState::new(|| (900, 540))
 }
 
 pub(crate) fn create(
@@ -73,6 +79,7 @@ pub(crate) fn create(
     peak_max: Arc<AtomicF32>,
     peak_min: Arc<AtomicF32>,
     shaper_input_data: Arc<Mutex<triple_buffer::Input<Arc<Shaper>>>>,
+    expression: Arc<RwLock<String>>,
 ) -> Option<Box<dyn Editor>> {
     create_vizia_editor(editor_state, ViziaTheming::Custom, move |cx, _| {
         debug!("Creating view...");
@@ -81,48 +88,81 @@ pub(crate) fn create(
         cx.add_stylesheet(include_style!("src/style.css"))
             .expect("Failed to load stylesheet");
 
-        let func = compile_shaper("x").expect("Failed to compile default");
+        let expr = expression.read().expect("Poisoned Lock").clone();
+        let func = compile_shaper(expr).expect("Failed to compile stored expression");
         let shaper = Arc::new(Mutex::new(Arc::new(func)));
         Data {
-            _params: params.clone(),
+            params: params.clone(),
             shaper: shaper.clone(),
             peak_max: peak_max.clone(),
             peak_min: peak_min.clone(),
             shaper_input_data: shaper_input_data.clone(),
             last_error: String::new(),
+            expression: expression.clone(),
         }
         .build(cx);
 
-        HStack::new(cx, move |cx| {
-            VStack::new(cx, move |cx| {
-                Label::new(cx, "PRE")
+        VStack::new(cx, move |cx| {
+            HStack::new(cx, |cx| {
+                VStack::new(cx, |cx| {
+                    Label::new(cx, "a:");
+                    ParamSlider::new(cx, Data::params, |params| &params.a);
+                })
                 .width(Stretch(1.0));
-                Button::new(
-                    cx,
-                    |cx| {
-                        cx.emit(EditorEvent::Generate);
-                    },
-                    |cx| Label::new(cx, "Reload"),
-                )
+                VStack::new(cx, |cx| {
+                    Label::new(cx, "b:");
+                    ParamSlider::new(cx, Data::params, |params| &params.b);
+                })
                 .width(Stretch(1.0));
-                Label::new(cx, Data::last_error)
-                .width(Stretch(1.0))
-                .height(Stretch(4.0))
-                .text_wrap(true);
+                VStack::new(cx, |cx| {
+                    Label::new(cx, "c:");
+                    ParamSlider::new(cx, Data::params, |params| &params.c);
+                })
+                .width(Stretch(1.0));
+                VStack::new(cx, |cx| {
+                    Label::new(cx, "d:");
+                    ParamSlider::new(cx, Data::params, |params| &params.d);
+                })
+                .width(Stretch(1.0));
             })
-            .class("side-container");
+            .height(Stretch(1.0));
+            HStack::new(cx, move |cx| {
+                VStack::new(cx, move |cx| {
+                    Label::new(cx, "PRE").width(Stretch(1.0));
+                    Button::new(
+                        cx,
+                        |cx| {
+                            cx.emit(EditorEvent::Generate);
+                        },
+                        |cx| Label::new(cx, "Reload"),
+                    )
+                    .width(Stretch(1.0));
+                    Label::new(cx, Data::last_error)
+                        .width(Stretch(1.0))
+                        .height(Stretch(4.0))
+                        .text_wrap(true);
+                })
+                .class("side-container");
 
-            VStack::new(cx, move |cx| {
-                ShaperView::new(cx, Data::shaper, Data::peak_max, Data::peak_min);
-                // TODO: Resizing layout, keep at square
-            })
-            .class("main-container");
+                VStack::new(cx, move |cx| {
+                    ShaperView::new(
+                        cx,
+                        Data::shaper,
+                        Data::peak_max,
+                        Data::peak_min,
+                        Data::params,
+                    );
+                    // TODO: Resizing layout, keep at square
+                })
+                .class("main-container");
 
-            VStack::new(cx, |cx| {
-                Label::new(cx, "POST");
+                VStack::new(cx, |cx| {
+                    Label::new(cx, "POST");
+                })
+                .class("side-container");
             })
-            .class("side-container");
-        })
-        .class("main-row");
+            .class("main-row")
+            .height(Stretch(5.0));
+        });
     })
 }

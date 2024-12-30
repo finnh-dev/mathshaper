@@ -141,7 +141,12 @@ impl MathFunctions {
 
     #[name = "tanh"]
     fn math_tanh(x: f32) -> f32 {
-        x.tanh()
+        match x {
+            f32::INFINITY => 1.0,
+            f32::NEG_INFINITY => -1.0,
+            x if x.is_nan() => 0.0,
+            x => x.tanh(),
+        }
     }
 
     #[name = "atanh"]

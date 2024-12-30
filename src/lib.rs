@@ -3,16 +3,15 @@ mod math;
 mod shaper;
 
 use core::f32;
-use shaper::{compile_shaper, Shaper};
 use nih_plug::prelude::*;
 use nih_plug_vizia::ViziaState;
-use std::sync::{Arc, Mutex};
+use shaper::{compile_shaper, Shaper};
+use std::sync::{Arc, Mutex, RwLock};
 use triple_buffer::TripleBuffer;
 use valib::oversample::Oversample;
 // This is a shortened version of the gain example with most comments removed, check out
 // https://github.com/robbert-vdh/nih-plug/blob/master/plugins/examples/gain/src/lib.rs to get
 // started
-
 
 const MAX_BLOCK_SIZE: usize = 512;
 const OVERSAMPLE_MAX: usize = 16;
@@ -24,6 +23,7 @@ pub struct Mathshaper {
     shaper_input_data: Arc<Mutex<triple_buffer::Input<Arc<Shaper>>>>,
     shaper_output_data: triple_buffer::Output<Arc<Shaper>>,
     resamplers: Box<[Oversample<f32>]>,
+    expression: Arc<RwLock<String>>,
 }
 
 #[derive(Params)]
@@ -40,6 +40,14 @@ struct MathshaperParams {
     pub post_gain: FloatParam,
     #[id = "decay"]
     pub decay: FloatParam,
+    #[id = "a"]
+    pub a: FloatParam,
+    #[id = "b"]
+    pub b: FloatParam,
+    #[id = "c"]
+    pub c: FloatParam,
+    #[id = "d"]
+    pub d: FloatParam,
 }
 
 impl Default for Mathshaper {
@@ -53,6 +61,7 @@ impl Default for Mathshaper {
             shaper_input_data: Arc::new(Mutex::new(shaper_in)),
             shaper_output_data: shaper_out,
             resamplers: vec![].into_boxed_slice(),
+            expression: Arc::new(RwLock::new("x".to_owned())),
         }
     }
 }
@@ -105,6 +114,10 @@ impl Default for MathshaperParams {
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
             decay: FloatParam::new("decay", 0.4, FloatRange::Linear { min: 0.0, max: 3.0 }),
+            a: FloatParam::new("a", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 }),
+            b: FloatParam::new("b", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 }),
+            c: FloatParam::new("c", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 }),
+            d: FloatParam::new("d", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 }),
         }
     }
 }
@@ -157,6 +170,7 @@ impl Plugin for Mathshaper {
             self.peak_max.clone(),
             self.peak_min.clone(),
             self.shaper_input_data.clone(),
+            self.expression.clone(),
         )
     }
 
@@ -208,11 +222,16 @@ impl Plugin for Mathshaper {
                 let pre_gain = self.params.pre_gain.smoothed.next();
                 let post_gain = self.params.post_gain.smoothed.next();
 
+                let a = self.params.a.value();
+                let b = self.params.b.value();
+                let c = self.params.c.value();
+                let d = self.params.d.value();
+
                 for sample in io_buffer.iter_mut() {
-                    *sample = *sample * pre_gain;
+                    *sample *= pre_gain;
                     new_peak_max = new_peak_max.max(*sample);
                     new_peak_min = new_peak_min.min(*sample);
-                    *sample = shaper_data(*sample, 1.0, 1.0, 1.0, 1.0) * post_gain; // TODO: add params
+                    *sample = shaper_data(*sample, a, b, c, d) * post_gain; // TODO: add params
                 }
 
                 // oversampled_block.finish(io_buffer);
@@ -238,7 +257,7 @@ impl Plugin for Mathshaper {
             .store(peak_max, std::sync::atomic::Ordering::Relaxed);
         self.peak_min
             .store(peak_min, std::sync::atomic::Ordering::Relaxed);
-        
+
         ProcessStatus::Normal
     }
 }

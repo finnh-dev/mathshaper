@@ -1,4 +1,7 @@
-use anita::{compile_expression, jit::{compiled_function::CompiledFunction, JITError}};
+use anita::{
+    compile_expression,
+    jit::{compiled_function::CompiledFunction, JITError},
+};
 
 use crate::math::function_manager::MathFunctions;
 
