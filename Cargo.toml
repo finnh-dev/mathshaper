@@ -13,6 +13,10 @@ members = ["xtask"]
 [lib]
 crate-type = ["cdylib", "lib"]
 
+[[bin]]
+name = "mathshaper_standalone"
+path = "src/main.rs"
+
 [dependencies]
 # Remove the `assert_process_allocs` feature to allow allocations on the audio
 # thread in debug builds.
@@ -36,7 +40,3 @@ strip = "symbols"
 inherits = "release"
 debug = true
 strip = "none"
-
-[dev-dependencies]
-# plotly = "0.8.4"
-# rand = "0.8.5"

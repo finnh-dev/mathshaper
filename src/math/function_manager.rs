@@ -4,6 +4,12 @@ pub(crate) struct MathFunctions;
 
 #[function_manager]
 impl MathFunctions {
+    #[name = "pmap"]
+    fn param_range(param: f32, min: f32, max: f32) -> f32 {
+        let range = max - min;
+        param * range + min
+    }
+
     #[name = "min"]
     fn math_min(x: f32, y: f32) -> f32 {
         x.min(y)
@@ -181,5 +187,28 @@ impl MathFunctions {
         } else {
             b
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::MathFunctions;
+
+    #[test]
+    fn test_param_range() {
+        // Test unipolar
+        assert_eq!(MathFunctions::param_range(0.0, 10.0, 20.0), 10.0);
+        assert_eq!(MathFunctions::param_range(0.5, 10.0, 20.0), 15.0);
+        assert_eq!(MathFunctions::param_range(1.0, 10.0, 20.0), 20.0);
+
+        // Test unipolar inverted
+        assert_eq!(MathFunctions::param_range(0.0, 20.0, 10.0), 20.0);
+        assert_eq!(MathFunctions::param_range(0.5, 20.0, 10.0), 15.0);
+        assert_eq!(MathFunctions::param_range(1.0, 20.0, 10.0), 10.0);
+
+        // Test bipolar
+        assert_eq!(MathFunctions::param_range(0.0, -1.0, 1.0), -1.0);
+        assert_eq!(MathFunctions::param_range(0.5, -1.0, 1.0), 0.0);
+        assert_eq!(MathFunctions::param_range(1.0, -1.0, 1.0), 1.0);
     }
 }

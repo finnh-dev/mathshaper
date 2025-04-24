@@ -1,4 +1,5 @@
 .main-row {
+    color: rgb(255, 255, 255);
     background-color: rgb(20, 20, 20);
     col-between: 0px;
 }
@@ -12,4 +13,10 @@
 .main-container {
     color: white;
     width: 2s;
+}
+
+.param-container {
+    color: white;
+    background-color: black;
+    border-color: white;
 }

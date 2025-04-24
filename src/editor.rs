@@ -106,29 +106,31 @@ pub(crate) fn create(
             HStack::new(cx, |cx| {
                 VStack::new(cx, |cx| {
                     Label::new(cx, "a:");
-                    ParamSlider::new(cx, Data::params, |params| &params.a);
+                    ParamSlider::new(cx, Data::params, |params| &params.a).width(Stretch(1.0));
                 })
                 .width(Stretch(1.0));
                 VStack::new(cx, |cx| {
                     Label::new(cx, "b:");
-                    ParamSlider::new(cx, Data::params, |params| &params.b);
+                    ParamSlider::new(cx, Data::params, |params| &params.b).width(Stretch(1.0));
                 })
                 .width(Stretch(1.0));
                 VStack::new(cx, |cx| {
                     Label::new(cx, "c:");
-                    ParamSlider::new(cx, Data::params, |params| &params.c);
+                    ParamSlider::new(cx, Data::params, |params| &params.c).width(Stretch(1.0));
                 })
                 .width(Stretch(1.0));
                 VStack::new(cx, |cx| {
                     Label::new(cx, "d:");
-                    ParamSlider::new(cx, Data::params, |params| &params.d);
+                    ParamSlider::new(cx, Data::params, |params| &params.d).width(Stretch(1.0));
                 })
                 .width(Stretch(1.0));
             })
+            .class("param-container")
             .height(Stretch(1.0));
             HStack::new(cx, move |cx| {
                 VStack::new(cx, move |cx| {
                     Label::new(cx, "PRE").width(Stretch(1.0));
+                    ParamSlider::new(cx, Data::params, |params| &params.pre_gain).width(Stretch(1.0));
                     Button::new(
                         cx,
                         |cx| {
@@ -158,6 +160,7 @@ pub(crate) fn create(
 
                 VStack::new(cx, |cx| {
                     Label::new(cx, "POST");
+                    ParamSlider::new(cx, Data::params, |params| &params.post_gain).width(Stretch(1.0));
                 })
                 .class("side-container");
             })
