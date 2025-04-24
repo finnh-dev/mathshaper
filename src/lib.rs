@@ -4,14 +4,12 @@ mod shaper;
 
 use core::f32;
 use nih_plug::prelude::*;
-use nih_plug_vizia::ViziaState;
 use shaper::{compile_shaper, Shaper};
 use std::sync::{Arc, Mutex, RwLock};
 use triple_buffer::TripleBuffer;
-use valib::oversample::Oversample;
+use vizia_plug::ViziaState;
 
 const MAX_BLOCK_SIZE: usize = 512;
-const OVERSAMPLE_MAX: usize = 16;
 
 pub struct Mathshaper {
     params: Arc<MathshaperParams>,
@@ -19,7 +17,6 @@ pub struct Mathshaper {
     peak_min: Arc<AtomicF32>,
     shaper_input_data: Arc<Mutex<triple_buffer::Input<Arc<Shaper>>>>,
     shaper_output_data: triple_buffer::Output<Arc<Shaper>>,
-    resamplers: Box<[Oversample<f32>]>,
     expression: Arc<RwLock<String>>,
 }
 
@@ -53,7 +50,6 @@ impl Default for Mathshaper {
             peak_min: Arc::default(),
             shaper_input_data: Arc::new(Mutex::new(shaper_in)),
             shaper_output_data: shaper_out,
-            resamplers: vec![].into_boxed_slice(),
             expression: Arc::new(RwLock::new("x".to_owned())),
         }
     }
@@ -143,24 +139,14 @@ impl Plugin for Mathshaper {
 
     fn initialize(
         &mut self,
-        audio_io_layout: &AudioIOLayout,
+        _audio_io_layout: &AudioIOLayout,
         _buffer_config: &BufferConfig,
         _context: &mut impl InitContext<Self>,
     ) -> bool {
-        println!("input channels: {:?}", audio_io_layout.main_output_channels);
-        let input_channels = audio_io_layout
-            .main_input_channels
-            .unwrap_or(unsafe { NonZeroU32::new_unchecked(1) })
-            .get() as usize;
-        let resamplers =
-            vec![Oversample::<f32>::new(OVERSAMPLE_MAX, MAX_BLOCK_SIZE); input_channels];
-        self.resamplers = resamplers.into_boxed_slice();
         true
     }
 
-    fn reset(&mut self) {
-
-    }
+    fn reset(&mut self) {}
 
     fn process(
         &mut self,
@@ -174,13 +160,8 @@ impl Plugin for Mathshaper {
         let shaper_data = self.shaper_output_data.read();
 
         for (_, block) in buffer.iter_blocks(MAX_BLOCK_SIZE) {
-            for (channel, io_buffer) in block.into_iter().enumerate() {
-                if channel >= self.resamplers.len() {
-                    nih_log!("Channel index out of bounds");
-                    break;
-                }
-
-                // let mut oversampled_block = self.resamplers[channel].oversample(io_buffer);
+            for io_buffer in block.into_iter() {
+                // TODO: Oversample
 
                 let pre_gain = self.params.pre_gain.smoothed.next();
                 let post_gain = self.params.post_gain.smoothed.next();
@@ -197,7 +178,7 @@ impl Plugin for Mathshaper {
                     *sample = shaper_data(*sample, a, b, c, d) * post_gain; // TODO: add params
                 }
 
-                // oversampled_block.finish(io_buffer);
+                // TODO: Downsample
             }
         }
 

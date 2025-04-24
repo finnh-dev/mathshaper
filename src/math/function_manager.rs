@@ -1,4 +1,5 @@
-use anita::function_manager;
+use anita::anita_macros::function_manager;
+use anita::jit::types::AnitaType;
 
 pub(crate) struct MathFunctions;
 

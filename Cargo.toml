@@ -21,16 +21,16 @@ path = "src/main.rs"
 # Remove the `assert_process_allocs` feature to allow allocations on the audio
 # thread in debug builds.
 nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["assert_process_allocs", "standalone"] }
-nih_plug_vizia = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+# nih_plug_vizia = { git = "https://github.com/robbert-vdh/nih-plug.git" }
 # Uncomment the below line to disable the on-by-default VST3 feature to remove
 # the GPL compatibility requirement
 # nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", default_features = false, features = ["assert_process_allocs"] }
 evalexpr = "11.3.0"
 rand = "0.8.5"
 triple_buffer = "8.0.0"
-valib = { git = "https://github.com/SolarLiner/valib.git", rev = "c1426b9f" }
 dotenvy = "0.15.7"
-anita = { git = "https://github.com/finnh-dev/anita.git", features = ["no-default-functions"]}
+anita = { git = "https://github.com/finnh-dev/anita.git", features = []}
+vizia_plug = { git = "https://github.com/vizia/vizia-plug.git", rev = "ebdc897", version = "0.1.0" }
 
 [profile.release]
 lto = "thin"
