@@ -1,8 +1,10 @@
+mod dsp;
 mod editor;
 mod math;
 mod shaper;
 
 use core::f32;
+use dsp::oversampler::Oversampler;
 use nih_plug::prelude::*;
 use shaper::{compile_shaper, Shaper};
 use std::sync::{Arc, Mutex, RwLock};
@@ -17,6 +19,7 @@ pub struct Mathshaper {
     peak_min: Arc<AtomicF32>,
     shaper_input_data: Arc<Mutex<triple_buffer::Input<Arc<Shaper>>>>,
     shaper_output_data: triple_buffer::Output<Arc<Shaper>>,
+    oversamplers: Box<[Oversampler]>,
     expression: Arc<RwLock<String>>,
 }
 
@@ -51,6 +54,7 @@ impl Default for Mathshaper {
             shaper_input_data: Arc::new(Mutex::new(shaper_in)),
             shaper_output_data: shaper_out,
             expression: Arc::new(RwLock::new("x".to_owned())),
+            oversamplers: Box::new([]),
         }
     }
 }
@@ -139,10 +143,21 @@ impl Plugin for Mathshaper {
 
     fn initialize(
         &mut self,
-        _audio_io_layout: &AudioIOLayout,
+        audio_io_layout: &AudioIOLayout,
         _buffer_config: &BufferConfig,
         _context: &mut impl InitContext<Self>,
     ) -> bool {
+        let mut oversamplers = Vec::new();
+        if let Some(channels) = audio_io_layout.main_input_channels {
+            for _ in 0..channels.into() {
+                oversamplers.push(Oversampler::new(dsp::oversampler::FilterType::SteepFour));
+            }
+        } else {
+            for _ in 0..2 {
+                oversamplers.push(Oversampler::new(dsp::oversampler::FilterType::SteepFour));
+            }
+        }
+        self.oversamplers = oversamplers.into_boxed_slice();
         true
     }
 
@@ -160,25 +175,29 @@ impl Plugin for Mathshaper {
         let shaper_data = self.shaper_output_data.read();
 
         for (_, block) in buffer.iter_blocks(MAX_BLOCK_SIZE) {
-            for io_buffer in block.into_iter() {
-                // TODO: Oversample
-
-                let pre_gain = self.params.pre_gain.smoothed.next();
-                let post_gain = self.params.post_gain.smoothed.next();
-
-                let a = self.params.a.value();
-                let b = self.params.b.value();
-                let c = self.params.c.value();
-                let d = self.params.d.value();
-
+            for (channel_index, io_buffer) in block.into_iter().enumerate() {
                 for sample in io_buffer.iter_mut() {
+                    
+                    let pre_gain = self.params.pre_gain.smoothed.next();
+                    let post_gain = self.params.post_gain.smoothed.next();
+                    
+                    let a = self.params.a.value();
+                    let b = self.params.b.value();
+                    let c = self.params.c.value();
+                    let d = self.params.d.value();
+
                     *sample *= pre_gain;
                     new_peak_max = new_peak_max.max(*sample);
                     new_peak_min = new_peak_min.min(*sample);
-                    *sample = shaper_data(*sample, a, b, c, d) * post_gain; // TODO: add params
-                }
+                    
+                    let oversampled = self.oversamplers[channel_index].interpolate(*sample);
 
-                // TODO: Downsample
+                    for s in oversampled {
+                        *s = shaper_data(*s, a, b, c, d);
+                    }
+                    
+                    *sample = self.oversamplers[channel_index].decimate() * post_gain;
+                }
             }
         }
 

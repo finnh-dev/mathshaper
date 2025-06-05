@@ -71,7 +71,6 @@ impl View for ShaperView {
         grid.line_to(Point::new(bounds.x + bounds.w / 2.0, bounds.y + bounds.h));
         grid.move_to(Point::new(bounds.x + 0.0, bounds.y + bounds.h / 2.0));
         grid.line_to(Point::new(bounds.x + bounds.w, bounds.y + bounds.h / 2.0));
-        grid.close();
         canvas.draw_path(&grid, &grid_paint);
 
         // Draw Plot
