@@ -4,14 +4,15 @@ mod math;
 mod shaper;
 
 use core::f32;
-use dsp::oversampler::Oversampler;
 use nih_plug::prelude::*;
 use shaper::{compile_shaper, Shaper};
 use std::sync::{Arc, Mutex, RwLock};
 use triple_buffer::TripleBuffer;
+use valib::oversample::Oversample;
 use vizia_plug::ViziaState;
 
 const MAX_BLOCK_SIZE: usize = 512;
+const MAX_OS_FACTOR: usize = 16;
 
 pub struct Mathshaper {
     params: Arc<MathshaperParams>,
@@ -19,7 +20,8 @@ pub struct Mathshaper {
     peak_min: Arc<AtomicF32>,
     shaper_input_data: Arc<Mutex<triple_buffer::Input<Arc<Shaper>>>>,
     shaper_output_data: triple_buffer::Output<Arc<Shaper>>,
-    oversamplers: Box<[Oversampler]>,
+    oversamplers: Box<[Oversample<f32>]>,
+    sidechain_oversamplers: Box<[Oversample<f32>]>,
     expression: Arc<RwLock<String>>,
 }
 
@@ -55,6 +57,7 @@ impl Default for Mathshaper {
             shaper_output_data: shaper_out,
             expression: Arc::new(RwLock::new("x".to_owned())),
             oversamplers: Box::new([]),
+            sidechain_oversamplers: Box::new([]),
         }
     }
 }
@@ -112,7 +115,7 @@ impl Plugin for Mathshaper {
         main_input_channels: NonZeroU32::new(2),
         main_output_channels: NonZeroU32::new(2),
 
-        aux_input_ports: &[],
+        aux_input_ports: &[new_nonzero_u32(2)],
         aux_output_ports: &[],
 
         names: PortNames::const_default(),
@@ -150,14 +153,19 @@ impl Plugin for Mathshaper {
         let mut oversamplers = Vec::new();
         if let Some(channels) = audio_io_layout.main_input_channels {
             for _ in 0..channels.into() {
-                oversamplers.push(Oversampler::new(dsp::oversampler::FilterType::SteepFour));
+                oversamplers.push(Oversample::new(MAX_OS_FACTOR, MAX_BLOCK_SIZE))
             }
         } else {
-            for _ in 0..2 {
-                oversamplers.push(Oversampler::new(dsp::oversampler::FilterType::SteepFour));
-            }
+            panic!("unexpected io layout");
         }
         self.oversamplers = oversamplers.into_boxed_slice();
+        let mut sidechain_oversamplers = Vec::new();
+        let channels = audio_io_layout.aux_input_ports[0];
+        for _ in 0..channels.into() {
+            sidechain_oversamplers.push(Oversample::new(MAX_OS_FACTOR, MAX_BLOCK_SIZE));
+        }
+        self.sidechain_oversamplers = sidechain_oversamplers.into_boxed_slice();
+
         true
     }
 
@@ -166,7 +174,7 @@ impl Plugin for Mathshaper {
     fn process(
         &mut self,
         buffer: &mut Buffer,
-        _aux: &mut AuxiliaryBuffers,
+        aux: &mut AuxiliaryBuffers,
         _context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
         let mut new_peak_max = f32::MIN;
@@ -174,30 +182,35 @@ impl Plugin for Mathshaper {
 
         let shaper_data = self.shaper_output_data.read();
 
-        for (_, block) in buffer.iter_blocks(MAX_BLOCK_SIZE) {
-            for (channel_index, io_buffer) in block.into_iter().enumerate() {
-                for sample in io_buffer.iter_mut() {
-                    
-                    let pre_gain = self.params.pre_gain.smoothed.next();
-                    let post_gain = self.params.post_gain.smoothed.next();
-                    
-                    let a = self.params.a.value();
-                    let b = self.params.b.value();
-                    let c = self.params.c.value();
-                    let d = self.params.d.value();
+        let buffers = buffer
+            .iter_blocks(MAX_BLOCK_SIZE)
+            .zip(aux.inputs[0].iter_blocks(MAX_BLOCK_SIZE));
 
+        for ((_, sample_block), (_, sidechain_block)) in buffers {
+            let block_buffers = sample_block.into_iter().zip(sidechain_block.into_iter());
+            for (channel_index, (io_buffer, sc_buffer)) in block_buffers.enumerate() {
+                let pre_gain = self.params.pre_gain.smoothed.next();
+                let post_gain = self.params.post_gain.smoothed.next();
+
+                let a = self.params.a.value();
+                let b = self.params.b.value();
+                let c = self.params.c.value();
+                let d = self.params.d.value();
+
+                let oversampled = self.oversamplers[channel_index].upsample(&io_buffer);
+                let sidechain_oversampled =
+                    self.sidechain_oversamplers[channel_index].upsample(&sc_buffer);
+                for (sample, sidechain) in
+                    oversampled.iter_mut().zip(sidechain_oversampled.iter_mut())
+                {
                     *sample *= pre_gain;
                     new_peak_max = new_peak_max.max(*sample);
                     new_peak_min = new_peak_min.min(*sample);
-                    
-                    let oversampled = self.oversamplers[channel_index].interpolate(*sample);
 
-                    for s in oversampled {
-                        *s = shaper_data(*s, a, b, c, d);
-                    }
-                    
-                    *sample = self.oversamplers[channel_index].decimate() * post_gain;
+                    *sample = shaper_data(*sample, *sidechain, a, b, c, d) * post_gain;
                 }
+
+                self.oversamplers[channel_index].downsample(io_buffer);
             }
         }
 
@@ -238,8 +251,10 @@ impl Vst3Plugin for Mathshaper {
     const VST3_CLASS_ID: [u8; 16] = *b"mathshaperfinnhe";
 
     const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] =
-        &[Vst3SubCategory::Fx, Vst3SubCategory::Dynamics];
+        &[Vst3SubCategory::Fx, Vst3SubCategory::Distortion];
 }
 
+#[cfg(feature = "clap")]
 nih_export_clap!(Mathshaper);
+#[cfg(feature = "vst3")]
 nih_export_vst3!(Mathshaper);

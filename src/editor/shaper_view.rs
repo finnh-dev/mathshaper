@@ -10,6 +10,8 @@ use crate::MathshaperParams;
 
 use super::Shaper;
 
+const SC_DEFAULT: f32 = 1.0; // TODO: maybe add sidechain slider for visual feedback
+
 pub struct ShaperView {
     shaper: Arc<Mutex<Arc<Shaper>>>,
     _peak_max: Arc<AtomicF32>,
@@ -96,12 +98,14 @@ impl View for ShaperView {
             plot.move_to(Point::new(
                 bounds.x,
                 bounds.y + (bounds.h / 2.0)
-                    - ((bounds.h / Self::RANGE_Y) * func(-(Self::RANGE_X / 2.0), a, b, c, d)),
+                    - ((bounds.h / Self::RANGE_Y)
+                        * func(-(Self::RANGE_X / 2.0), SC_DEFAULT, a, b, c, d)),
             ));
 
             for i in 0..Self::RESOLUTION {
                 let y = func(
                     (i as f32 / Self::RESOLUTION as f32) * Self::RANGE_X - (Self::RANGE_X / 2.0),
+                    SC_DEFAULT,
                     a,
                     b,
                     c,
